@@ -100,7 +100,7 @@ const authTokenPrefix = 'auth:token:';
 const authApiKeyPrefix = 'auth:apikey:';
 const authApiKeyIndexKey = 'auth:apikey:index';
 const defaultUsername = 'amdin';
-const defaultPassword = 'redisrag';
+const defaultPassword = 'RedisRAG@2026';
 const authTokenTtlSeconds = 60 * 60 * 24;
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {

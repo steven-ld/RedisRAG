@@ -62,7 +62,7 @@ docker compose up --build -d
 ### 2) 默认账号登录（首次会强制改密）
 
 - 用户名：`amdin`
-- 密码：`redisrag`
+- 密码：`RedisRAG@2026`
 
 > 注意：代码中默认账号名是 `amdin`（不是 `admin`）。
 
@@ -71,7 +71,7 @@ docker compose up --build -d
 ```bash
 curl -sS -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"amdin","password":"redisrag"}'
+  -d '{"username":"amdin","password":"RedisRAG@2026"}'
 ```
 
 首次登录后，用返回 token 调用改密接口，获取 `full` 权限 token：
