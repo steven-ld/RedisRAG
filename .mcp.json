@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "redis-rag": {
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer mcp_061595de6489d8d9cde73f197aa67b590587adb5773f8d67"
+      }
+    }
+  }
+}
