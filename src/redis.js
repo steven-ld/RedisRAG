@@ -389,6 +389,17 @@ export async function verifyMcpApiKey(apiKey) {
   };
 }
 
+function extractTitleFromContent(content) {
+  if (!content) return 'Untitled';
+  const h1Match = String(content).match(/^#\s+(.+)$/m);
+  if (h1Match && h1Match[1]) {
+    const title = h1Match[1].trim();
+    return title.length > 80 ? title.slice(0, 80) + '…' : title;
+  }
+  const plainText = String(content).replace(/[#*`_~\[\]]/g, '').trim();
+  return plainText.slice(0, 50) + (plainText.length > 50 ? '…' : '');
+}
+
 export async function upsertDocument({
   id = crypto.randomUUID(),
   content,
@@ -398,10 +409,12 @@ export async function upsertDocument({
   const embedding = await getEmbedding(content);
   const key = `${config.keyPrefix}${id}`;
   const createdAt = Date.now();
+  const title = extractTitleFromContent(content);
 
   await client.hSet(key, {
     id,
     content,
+    title,
     source,
     tags: tags.join(','),
     createdAt: String(createdAt),
@@ -412,6 +425,7 @@ export async function upsertDocument({
     id,
     key,
     content,
+    title,
     source,
     tags,
     createdAt

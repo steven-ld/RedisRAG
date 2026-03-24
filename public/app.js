@@ -604,7 +604,7 @@ function renderDocuments(items) {
       `;
     }
 
-    node.querySelector('.doc-card-title').textContent = item.id;
+    node.querySelector('.doc-card-title').textContent = item.title || item.id;
     node.querySelector('.doc-card-preview').textContent = truncateText(item.content);
     node.querySelector('.doc-source').textContent = `来源: ${item.source || 'manual'}`;
     node.querySelector('.doc-date').textContent = new Date(item.createdAt).toLocaleDateString('zh-CN');
@@ -1043,7 +1043,7 @@ async function submitCreateDocument(event) {
 }
 
 async function activateView(view) {
-  const nextView = ['monitor', 'documents', 'api', 'about'].includes(view) ? view : 'monitor';
+  const nextView = ['monitor', 'search', 'documents', 'api', 'about'].includes(view) ? view : 'monitor';
 
   if (state.requirePasswordChange && nextView !== 'monitor') {
     showForcePasswordModal('请先完成首次改密。');
