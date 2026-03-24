@@ -1,6 +1,6 @@
 # RedisRAG
 
-RedisRAG 是一个基于 **JavaScript + Redis Stack** 的轻量 RAG 控制台与 API 服务，支持文档入库、语义检索、文档筛选、监控指标和 API Key 管理。
+RedisRAG 是一个基于 **JavaScript + Redis Stack** 的轻量 RAG 控制台与 API 服务，支持文档入库、语义检索、文档筛选、标准 MCP 检索接入和 API Key 管理。
 
 适合场景：
 - 中小规模知识库检索
@@ -13,9 +13,10 @@ RedisRAG 是一个基于 **JavaScript + Redis Stack** 的轻量 RAG 控制台与
 
 - 文档管理：创建、删除、分页、筛选（关键词/来源/标签）
 - 语义检索：向量检索 + 来源/标签过滤 + 分页
-- 监控指标：Redis 内存、命中率、搜索命中率、MCP 查询频次
+- 标准 MCP 检索：面向 AI 客户端暴露检索工具
+- 监控指标：Redis 内存、命中率、搜索命中率、请求统计
 - 鉴权体系：账号密码登录 + Token + 首次改密
-- API Key：为 MCP 场景生成/吊销长期 key
+- API Key：为 HTTP 监控接口生成/吊销长期 key
 
 ---
 
@@ -134,7 +135,7 @@ curl -sS "http://localhost:3000/api/documents?page=1&limit=6&keyword=vector&sour
 - `GET /api/health`
 - `GET /api/metrics`
 
-### 4.5 API Key（MCP）
+### 4.5 API Key（监控接口）
 
 - `POST /api/auth/api-keys` 创建 key
 - `GET /api/auth/api-keys` 列表
@@ -208,9 +209,78 @@ done
 
 ---
 
-## 6. MCP / Agent 监控接入
+## 6. 标准 MCP Server
 
-把 `/api/metrics` 作为 Agent 的只读监控数据源即可。
+仓库提供标准的 MCP stdio 服务，适合 Claude Desktop、Cursor 等支持 MCP 的客户端直接接入检索能力。
+
+### 6.1 启动
+
+```bash
+npm run mcp:start
+```
+
+默认会通过 `stdio` 与 MCP 客户端通信，不需要额外开放 HTTP 端口。
+
+### 6.2 工具清单
+
+- `search_documents`：语义检索文档，支持 `query`、`topK`、`page`、`limit`、`keyword`、`source`、`tags`
+- `list_documents`：分页列出文档，支持 `page`、`limit`、`keyword`、`source`、`tags`
+
+### 6.3 Claude Desktop 配置示例
+
+在 Claude Desktop 的 MCP 配置中加入类似下面的内容：
+
+```json
+{
+  "mcpServers": {
+    "redis-rag": {
+      "command": "npm",
+      "args": ["run", "mcp:start"],
+      "cwd": "/Users/ga666666/Desktop/Redis-RAG"
+    }
+  }
+}
+```
+
+如果你的环境里 `npm` 不在 PATH，也可以改成绝对路径，例如：
+
+```json
+{
+  "mcpServers": {
+    "redis-rag": {
+      "command": "/opt/homebrew/bin/npm",
+      "args": ["run", "mcp:start"],
+      "cwd": "/Users/ga666666/Desktop/Redis-RAG"
+    }
+  }
+}
+```
+
+### 6.4 Cursor 配置示例
+
+Cursor 也可以用同样的 stdio 启动方式，核心是 command + args + cwd：
+
+```json
+{
+  "mcpServers": {
+    "redis-rag": {
+      "command": "npm",
+      "args": ["run", "mcp:start"],
+      "cwd": "/Users/ga666666/Desktop/Redis-RAG"
+    }
+  }
+}
+```
+
+### 6.5 返回格式说明
+
+MCP 工具返回的是面向客户端消费的结构化结果，适合直接交给模型总结、引用或继续检索。它和 `/api/metrics` 这种监控接口不是一类能力。
+
+---
+
+## 7. MCP / Agent 监控接入
+
+把 `/api/metrics` 作为 Agent 的只读监控数据源即可。这个接口只用于监控，不承担标准 MCP 检索能力。
 
 建议最小采集字段：
 - `memory.usageRate`
@@ -221,7 +291,7 @@ done
 
 ---
 
-## 7. 环境变量
+## 8. 环境变量
 
 - `PORT`：默认 `3000`
 - `REDIS_URL`：默认 `redis://localhost:6379`
@@ -234,7 +304,7 @@ done
 
 ---
 
-## 8. 常见问题
+## 9. 常见问题
 
 ### Q1: 为什么内存占用率可能是 0%？
 Redis `maxmemory=0` 表示未设上限，`usageRate` 会显示 0。
@@ -243,4 +313,4 @@ Redis `maxmemory=0` 表示未设上限，`usageRate` 会显示 0。
 系统会在空库时自动写入样例文档；若没有，请检查 Redis 连接和应用日志。
 
 ### Q3: API Key 能访问哪些接口？
-当前仅允许访问 `GET /api/metrics`。
+当前仅允许访问 `GET /api/metrics`，它是监控接口，不是标准 MCP 工具入口。
