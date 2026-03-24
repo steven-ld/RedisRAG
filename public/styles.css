@@ -246,7 +246,7 @@ body::before {
 
 .brand-block {
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
 .sidebar {
@@ -269,7 +269,7 @@ body::before {
   letter-spacing: 0.18em;
   color: var(--accent-strong);
   font-size: 12px;
-  margin: 0 0 10px;
+  margin: 0 0 4px;
 }
 
 h1,
