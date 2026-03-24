@@ -529,30 +529,34 @@ function renderResults(items) {
 
   const fragment = document.createDocumentFragment();
   for (const item of items) {
-    const node = resultTemplate?.content?.firstElementChild
-      ? resultTemplate.content.firstElementChild.cloneNode(true)
-      : document.createElement('article');
+    const node = document.createElement('article');
+    node.className = 'result-card';
+    node.innerHTML = `
+      <div class="result-top">
+        <strong class="result-id">${escapeHtml(item.id)}</strong>
+        <span class="score-badge">相似度 ${item.similarity != null ? item.similarity.toFixed(3) : '—'}</span>
+      </div>
+      <p class="result-content doc-content">${escapeHtml(item.content)}</p>
+      <div class="meta-row">
+        <span class="result-source">来源: ${escapeHtml(item.source || 'unknown')}</span>
+        <span class="result-tags">标签: ${escapeHtml((item.tags || []).join(', ') || '无')}</span>
+      </div>
+      <div class="doc-actions">
+        <button class="ghost doc-preview-button search-preview-btn" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          全文预览
+        </button>
+      </div>
+    `;
 
-    if (!resultTemplate?.content?.firstElementChild) {
-      node.className = 'result-card';
-      node.innerHTML = `
-        <div class="result-top">
-          <strong class="result-id"></strong>
-          <span class="score-badge"></span>
-        </div>
-        <p class="result-content"></p>
-        <div class="meta-row">
-          <span class="result-source"></span>
-          <span class="result-tags"></span>
-        </div>
-      `;
-    }
+    const previewBtn = node.querySelector('.search-preview-btn');
+    on(previewBtn, 'click', () => {
+      openDocumentPreview(item);
+    });
 
-    node.querySelector('.result-id').textContent = item.id;
-    node.querySelector('.score-badge').textContent = `相似度 ${item.similarity ?? '-'}`;
-    node.querySelector('.result-content').textContent = item.content;
-    node.querySelector('.result-source').textContent = `来源: ${item.source || 'unknown'}`;
-    node.querySelector('.result-tags').textContent = `标签: ${(item.tags || []).join(', ') || '无'}`;
     fragment.appendChild(node);
   }
 
