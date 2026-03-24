@@ -15,11 +15,11 @@
         <form id="force-password-form" class="stack">
           <label>
             新密码
-            <input id="force-new-password" type="password" minlength="6" required />
+            <input id="force-new-password" name="newPassword" type="password" minlength="6" autocomplete="new-password" required />
           </label>
           <button type="submit" class="primary">确认修改</button>
         </form>
-        <p id="force-password-message" class="empty"></p>
+        <p id="force-password-message" class="empty" aria-live="polite"></p>
       </div>
     </div>
 
@@ -37,11 +37,11 @@
           <div class="grid-2">
             <label>
               来源
-              <input id="source" name="source" placeholder="例如 redis-docs" />
+              <input id="source" name="source" autocomplete="off" placeholder="例如 redis-docs…" />
             </label>
             <label>
               标签
-              <input id="tags" name="tags" placeholder="例如 redis,rag,vector" />
+              <input id="tags" name="tags" autocomplete="off" placeholder="例如 redis,rag,vector…" />
             </label>
           </div>
           <label>
@@ -50,7 +50,8 @@
               id="content"
               name="content"
               rows="9"
-              placeholder="输入要写入向量库的文档内容"
+              placeholder="输入要写入向量库的文档内容…"
+              autocomplete="off"
               required
             ></textarea>
           </label>
@@ -59,6 +60,31 @@
             <button type="submit" class="primary">保存文档</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div id="document-preview-modal" class="preview-shell hidden" aria-hidden="true">
+      <div class="preview-frame" role="dialog" aria-modal="true" aria-labelledby="document-preview-title">
+        <div class="preview-header">
+          <div class="preview-heading">
+            <p class="eyebrow">Markdown 阅读模式</p>
+            <h2 id="document-preview-title">文档预览</h2>
+            <p id="document-preview-meta" class="preview-meta">正在加载文档内容</p>
+          </div>
+          <button id="document-preview-close" class="ghost modal-close" type="button" aria-label="关闭全屏文档预览">关闭</button>
+        </div>
+
+        <div class="preview-body">
+          <aside class="preview-toc">
+            <div class="preview-toc-head">
+              <span class="preview-toc-label">目录</span>
+              <strong id="document-preview-toc-count">0</strong>
+            </div>
+            <nav id="document-preview-toc" class="preview-toc-list" aria-label="文档目录"></nav>
+          </aside>
+
+          <article id="document-preview-content" class="preview-content prose"></article>
+        </div>
       </div>
     </div>
 
@@ -194,7 +220,8 @@
                   id="query"
                   name="query"
                   rows="4"
-                  placeholder="例如 Redis 如何支持向量检索？"
+                  placeholder="例如 Redis 如何支持向量检索？…"
+                  autocomplete="off"
                   required
                 ></textarea>
               </label>
@@ -206,11 +233,11 @@
                 </label>
                 <label>
                   来源范围（可选）
-                  <input id="search-source" name="search-source" placeholder="例如 redis-docs" />
+                  <input id="search-source" name="search-source" autocomplete="off" placeholder="例如 redis-docs…" />
                 </label>
                 <label>
                   标签范围（可选）
-                  <input id="search-tags" name="search-tags" placeholder="例如 redis,rag" />
+                  <input id="search-tags" name="search-tags" autocomplete="off" placeholder="例如 redis,rag…" />
                 </label>
               </div>
 
@@ -238,15 +265,15 @@
               <div class="grid-3">
                 <label>
                   关键字索引
-                  <input id="document-keyword" placeholder="按文档内容筛选" />
+                  <input id="document-keyword" name="document-keyword" autocomplete="off" placeholder="按文档内容筛选…" />
                 </label>
                 <label>
                   来源
-                  <input id="document-source" placeholder="例如 redis-docs" />
+                  <input id="document-source" name="document-source" autocomplete="off" placeholder="例如 redis-docs…" />
                 </label>
                 <label>
                   标签
-                  <input id="document-tags" placeholder="例如 redis,rag" />
+                  <input id="document-tags" name="document-tags" autocomplete="off" placeholder="例如 redis,rag…" />
                 </label>
               </div>
               <div class="filter-actions">
@@ -273,7 +300,7 @@
                 <button id="page-last" class="ghost" type="button">末页</button>
                 <label class="inline-control">
                   跳转
-                  <input id="page-jump" type="number" min="1" value="1" />
+                    <input id="page-jump" name="page-jump" type="number" min="1" value="1" inputmode="numeric" />
                 </label>
                 <button id="page-go" class="ghost" type="button">Go</button>
               </div>
@@ -299,16 +326,16 @@
                 <div class="grid-2">
                   <label>
                     Key 名称
-                    <input id="apikey-name" placeholder="例如 mcp-prod-monitor" />
+                    <input id="apikey-name" name="apikey-name" autocomplete="off" placeholder="例如 mcp-prod-monitor…" />
                   </label>
                   <label>
                     有效天数
-                    <input id="apikey-days" type="number" min="1" value="3650" />
+                    <input id="apikey-days" name="apikey-days" type="number" min="1" value="3650" inputmode="numeric" />
                   </label>
                 </div>
                 <button type="submit" class="primary">生成 API Key</button>
               </form>
-              <div id="apikey-generated" class="empty">暂未生成新的 API Key。</div>
+              <div id="apikey-generated" class="empty" aria-live="polite">暂未生成新的 API Key。</div>
             </div>
 
             <div class="api-card">
@@ -373,7 +400,10 @@
       <article class="doc-card">
         <div class="result-top">
           <strong class="doc-title"></strong>
-          <button class="ghost danger" type="button">删除</button>
+          <div class="doc-actions">
+            <button class="ghost doc-preview-button" type="button">全屏查看</button>
+            <button class="ghost danger doc-delete-button" type="button">删除</button>
+          </div>
         </div>
         <p class="doc-content"></p>
         <div class="meta-row">

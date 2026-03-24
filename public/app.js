@@ -2,6 +2,7 @@ const APP_VERSION = '1.0.0';
 const authTokenKey = 'redis_rag_token';
 const SEARCH_PAGE_LIMIT = 5;
 const DEFAULT_DOCUMENT_LIMIT = 6;
+const DOCUMENT_SNIPPET_LIMIT = 300;
 
 const state = {
   requirePasswordChange: false,
@@ -167,6 +168,13 @@ const aboutLastQuery = first('#about-last-query');
 const aboutMemoryUsage = first('#about-memory-usage');
 const aboutMemoryRss = first('#about-memory-rss');
 const aboutVersionHint = first('#about-version-hint');
+const documentPreviewModal = first('#document-preview-modal');
+const documentPreviewCloseButton = first('#document-preview-close');
+const documentPreviewTitle = first('#document-preview-title');
+const documentPreviewMeta = first('#document-preview-meta');
+const documentPreviewToc = first('#document-preview-toc');
+const documentPreviewTocCount = first('#document-preview-toc-count');
+const documentPreviewContent = first('#document-preview-content');
 
 let documentsPageLimit = Number(pageLimitSelect?.value || DEFAULT_DOCUMENT_LIMIT);
 let currentPage = 1;
@@ -188,6 +196,166 @@ function escapeHtml(value) {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+}
+
+function truncateText(value, maxLength = DOCUMENT_SNIPPET_LIMIT) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trimEnd()}…`;
+}
+
+function slugifyHeading(text, index) {
+  const normalized = String(text || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\u4e00-\u9fa5-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-|-$/g, '');
+
+  return normalized ? `section-${index + 1}-${normalized}` : `section-${index + 1}`;
+}
+
+function parseInlineMarkdown(value) {
+  let html = escapeHtml(value);
+
+  html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, '<img src="$2" alt="$1" />');
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+  html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  return html;
+}
+
+function renderMarkdownDocument(value) {
+  const source = String(value || '').replace(/\r\n?/g, '\n');
+  const lines = source.split('\n');
+  const html = [];
+  const headings = [];
+  let paragraph = [];
+  let listItems = [];
+  let listType = '';
+  let quoteLines = [];
+  let inCodeBlock = false;
+  let codeLines = [];
+  let codeLanguage = '';
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p>${parseInlineMarkdown(paragraph.join(' '))}</p>`);
+    paragraph = [];
+  };
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    const tag = listType || 'ul';
+    html.push(`<${tag}>${listItems.map((item) => `<li>${parseInlineMarkdown(item)}</li>`).join('')}</${tag}>`);
+    listItems = [];
+    listType = '';
+  };
+
+  const flushQuote = () => {
+    if (!quoteLines.length) return;
+    const content = quoteLines
+      .map((line) => `<p>${parseInlineMarkdown(line)}</p>`)
+      .join('');
+    html.push(`<blockquote>${content}</blockquote>`);
+    quoteLines = [];
+  };
+
+  const flushCode = () => {
+    if (!inCodeBlock) return;
+    html.push(
+      `<pre><code${codeLanguage ? ` class="language-${escapeHtml(codeLanguage)}"` : ''}>${escapeHtml(codeLines.join('\n'))}</code></pre>`
+    );
+    inCodeBlock = false;
+    codeLines = [];
+    codeLanguage = '';
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine ?? '';
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```')) {
+      if (inCodeBlock) {
+        flushCode();
+      } else {
+        flushParagraph();
+        flushList();
+        flushQuote();
+        inCodeBlock = true;
+        codeLanguage = trimmed.slice(3).trim();
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(line);
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      const level = headingMatch[1].length;
+      const title = headingMatch[2].trim();
+      const id = slugifyHeading(title, headings.length);
+      headings.push({ id, level, title });
+      html.push(`<h${level} id="${id}">${parseInlineMarkdown(title)}</h${level}>`);
+      continue;
+    }
+
+    const unorderedMatch = trimmed.match(/^[-*+]\s+(.+)$/);
+    const orderedMatch = trimmed.match(/^\d+\.\s+(.+)$/);
+    if (unorderedMatch || orderedMatch) {
+      flushParagraph();
+      flushQuote();
+      const nextType = orderedMatch ? 'ol' : 'ul';
+      if (listType && listType !== nextType) {
+        flushList();
+      }
+      listType = nextType;
+      listItems.push((orderedMatch || unorderedMatch)[1].trim());
+      continue;
+    }
+
+    if (trimmed.startsWith('>')) {
+      flushParagraph();
+      flushList();
+      quoteLines.push(trimmed.replace(/^>\s?/, ''));
+      continue;
+    }
+
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      continue;
+    }
+
+    paragraph.push(trimmed);
+  }
+
+  flushParagraph();
+  flushList();
+  flushQuote();
+  flushCode();
+
+  if (!html.length) {
+    html.push('<p>该文档暂无内容。</p>');
+  }
+
+  return {
+    html: html.join(''),
+    headings
+  };
 }
 
 function formatBytes(value) {
@@ -429,7 +597,10 @@ function renderDocuments(items) {
       node.innerHTML = `
         <div class="result-top">
           <strong class="doc-title"></strong>
-          <button class="ghost danger" type="button">删除</button>
+          <div class="doc-actions">
+            <button class="ghost doc-preview-button" type="button">全屏查看</button>
+            <button class="ghost danger doc-delete-button" type="button">删除</button>
+          </div>
         </div>
         <p class="doc-content"></p>
         <div class="meta-row">
@@ -441,13 +612,21 @@ function renderDocuments(items) {
     }
 
     node.querySelector('.doc-title').textContent = item.id;
-    node.querySelector('.doc-content').textContent = item.content;
+    node.querySelector('.doc-content').textContent = truncateText(item.content);
     node.querySelector('.doc-source').textContent = `来源: ${item.source || 'manual'}`;
     node.querySelector('.doc-tags').textContent = `标签: ${(item.tags || []).join(', ') || '无'}`;
     node.querySelector('.doc-date').textContent = new Date(item.createdAt).toLocaleString();
 
-    const deleteButton = node.querySelector('button');
+    const previewButton = node.querySelector('.doc-preview-button');
+    on(previewButton, 'click', () => {
+      openDocumentPreview(item);
+    });
+
+    const deleteButton = node.querySelector('.doc-delete-button') || node.querySelector('button');
     on(deleteButton, 'click', async () => {
+      const confirmed = window.confirm(`确认删除文档“${item.id}”吗？此操作无法撤销。`);
+      if (!confirmed) return;
+
       deleteButton.disabled = true;
       try {
         await request(`/api/documents/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
@@ -462,6 +641,52 @@ function renderDocuments(items) {
   }
 
   documentsContainer.appendChild(fragment);
+}
+
+function renderDocumentPreviewToc(headings) {
+  if (!documentPreviewToc || !documentPreviewTocCount) return;
+
+  setText(documentPreviewTocCount, String(headings.length));
+
+  if (!headings.length) {
+    documentPreviewToc.innerHTML = '<p class="empty">当前文档未检测到 Markdown 标题，已直接展示正文。</p>';
+    return;
+  }
+
+  documentPreviewToc.innerHTML = headings
+    .map((heading) => `
+      <a href="#${escapeHtml(heading.id)}" class="preview-toc-link" data-level="${heading.level}">
+        <span class="preview-toc-level">H${heading.level}</span>
+        <span>${escapeHtml(heading.title)}</span>
+      </a>
+    `)
+    .join('');
+}
+
+function openDocumentPreview(item) {
+  if (!documentPreviewModal || !documentPreviewContent) return;
+
+  const rendered = renderMarkdownDocument(item.content);
+  const metadata = [
+    `来源 ${item.source || 'manual'}`,
+    `标签 ${(item.tags || []).join(', ') || '无'}`,
+    `创建于 ${new Date(item.createdAt).toLocaleString()}`
+  ];
+
+  setText(documentPreviewTitle, item.id || '文档预览');
+  setText(documentPreviewMeta, metadata.join(' · '));
+  documentPreviewContent.innerHTML = rendered.html;
+  renderDocumentPreviewToc(rendered.headings);
+  setHidden(documentPreviewModal, false);
+  documentPreviewModal.setAttribute('aria-hidden', 'false');
+  body?.classList.add('preview-open');
+}
+
+function closeDocumentPreview() {
+  if (!documentPreviewModal) return;
+  setHidden(documentPreviewModal, true);
+  documentPreviewModal.setAttribute('aria-hidden', 'true');
+  body?.classList.remove('preview-open');
 }
 
 function renderPagination(pageInfo) {
@@ -839,7 +1064,34 @@ function bindDocumentModalControls() {
 
   on(document, 'keydown', (event) => {
     if (event.key === 'Escape') {
+      if (documentPreviewModal && !documentPreviewModal.classList.contains('hidden')) {
+        closeDocumentPreview();
+        return;
+      }
       closeDocumentModal();
+    }
+  });
+}
+
+function bindDocumentPreviewControls() {
+  on(documentPreviewCloseButton, 'click', () => {
+    closeDocumentPreview();
+  });
+
+  on(documentPreviewModal, 'click', (event) => {
+    if (event.target === documentPreviewModal) {
+      closeDocumentPreview();
+    }
+  });
+
+  on(documentPreviewToc, 'click', (event) => {
+    const targetElement = event.target instanceof Element ? event.target : null;
+    const link = targetElement?.closest('a[href^="#"]');
+    if (!link) return;
+    event.preventDefault();
+    const target = document.querySelector(link.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   });
 }
@@ -1005,7 +1257,7 @@ function bindGlobalActions() {
     if (submitButton) {
       submitButton.disabled = true;
     }
-    setText(forcePasswordMessage, '正在修改密码...');
+    setText(forcePasswordMessage, '正在修改密码…');
 
     try {
       const payload = await request('/api/auth/change-password', {
@@ -1020,7 +1272,7 @@ function bindGlobalActions() {
 
       localStorage.setItem(authTokenKey, payload.token);
       state.requirePasswordChange = false;
-      setText(forcePasswordMessage, '密码修改成功，正在进入控制台...');
+      setText(forcePasswordMessage, '密码修改成功，正在进入控制台…');
       hideForcePasswordModal();
 
       if (isSidebarLayout()) {
@@ -1090,6 +1342,7 @@ function isSidebarLayout() {
 
 bindNavControls();
 bindDocumentModalControls();
+bindDocumentPreviewControls();
 bindDocumentFilters();
 bindSearchForm();
 bindApiKeyForm();
