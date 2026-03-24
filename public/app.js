@@ -10,6 +10,7 @@ const state = {
   session: null,
   health: null,
   metrics: null,
+  metricsTimer: null,
   documents: {
     page: 1,
     totalPages: 1,
@@ -26,6 +27,8 @@ const state = {
     payload: null
   }
 };
+
+const METRICS_AUTO_REFRESH_INTERVAL = 5000;
 
 function first(...selectors) {
   for (const selector of selectors.flat()) {
@@ -822,6 +825,24 @@ async function loadMetrics() {
   }
 }
 
+function startMetricsAutoRefresh() {
+  stopMetricsAutoRefresh();
+  if (state.currentView === 'monitor') {
+    state.metricsTimer = setInterval(() => {
+      if (state.currentView === 'monitor') {
+        loadMetrics();
+      }
+    }, METRICS_AUTO_REFRESH_INTERVAL);
+  }
+}
+
+function stopMetricsAutoRefresh() {
+  if (state.metricsTimer) {
+    clearInterval(state.metricsTimer);
+    state.metricsTimer = null;
+  }
+}
+
 function renderApiKeyList(items) {
   if (!apiKeyList) return;
   apiKeyList.innerHTML = '';
@@ -994,10 +1015,16 @@ async function activateView(view) {
     return;
   }
 
+  // Stop auto-refresh when leaving monitor view
+  if (state.currentView === 'monitor' && nextView !== 'monitor') {
+    stopMetricsAutoRefresh();
+  }
+
   setNavActive(nextView);
 
   if (nextView === 'monitor') {
     await Promise.allSettled([loadHealth(), loadMetrics()]);
+    startMetricsAutoRefresh();
     return;
   }
 
