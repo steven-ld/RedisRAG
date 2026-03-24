@@ -88,6 +88,7 @@ const navControls = sidebarNav
 
 const viewRoots = {
   monitor: first('#page-monitor', '[data-page="monitor"]', '#monitor-page'),
+  search: first('#page-search', '[data-page="search"]', '#search-page'),
   documents: first('#page-documents', '[data-page="documents"]', '#documents-page'),
   api: first('#page-api', '[data-page="api"]', '#api-page'),
   about: first('#page-about', '[data-page="about"]', '#about-page')
@@ -134,6 +135,10 @@ const mcpQueries = first('#mcp-queries');
 const mcpQpm = first('#mcp-qpm');
 const mcpQp5m = first('#mcp-qp5m');
 const mcpMissRate = first('#mcp-miss-rate');
+const searchLatency = first('#search-latency');
+const searchHitRate = first('#search-hit-rate');
+const searchResultCount = first('#search-result-count');
+const searchAvgScore = first('#search-avg-score');
 const apiKeyForm = first('#apikey-form', '#api-key-form');
 const apiKeyNameInput = first('#apikey-name', '#api-key-name');
 const apiKeyDaysInput = first('#apikey-days', '#api-key-days');
@@ -562,7 +567,7 @@ function renderSearchPagination(pageInfo) {
   setText(searchPageInfoText, `${pageInfo.page} / ${pageInfo.totalPages}`);
   if (searchPrevPageButton) searchPrevPageButton.disabled = pageInfo.page <= 1;
   if (searchNextPageButton) searchNextPageButton.disabled = pageInfo.page >= pageInfo.totalPages;
-  setText(searchCount, `${pageInfo.total} 条结果`);
+  if (searchCount) setText(searchCount, `${pageInfo.total} 条结果`);
 }
 
 function renderDocuments(items) {
@@ -583,27 +588,37 @@ function renderDocuments(items) {
     if (!documentTemplate?.content?.firstElementChild) {
       node.className = 'doc-card';
       node.innerHTML = `
-        <div class="result-top">
-          <strong class="doc-title"></strong>
-          <div class="doc-actions">
-            <button class="ghost doc-preview-button" type="button">全屏查看</button>
+        <div class="doc-card-header">
+          <strong class="doc-card-title"></strong>
+          <div class="doc-card-actions">
+            <button class="ghost doc-preview-button" type="button">查看</button>
             <button class="ghost danger doc-delete-button" type="button">删除</button>
           </div>
         </div>
-        <p class="doc-content"></p>
-        <div class="meta-row">
-          <span class="doc-source"></span>
-          <span class="doc-tags"></span>
-          <span class="doc-date"></span>
+        <p class="doc-card-preview"></p>
+        <div class="doc-card-meta">
+          <span class="doc-card-meta-item doc-source"></span>
+          <span class="doc-card-meta-item doc-date"></span>
         </div>
+        <div class="doc-card-tags"></div>
       `;
     }
 
-    node.querySelector('.doc-title').textContent = item.id;
-    node.querySelector('.doc-content').textContent = truncateText(item.content);
+    node.querySelector('.doc-card-title').textContent = item.id;
+    node.querySelector('.doc-card-preview').textContent = truncateText(item.content);
     node.querySelector('.doc-source').textContent = `来源: ${item.source || 'manual'}`;
-    node.querySelector('.doc-tags').textContent = `标签: ${(item.tags || []).join(', ') || '无'}`;
-    node.querySelector('.doc-date').textContent = new Date(item.createdAt).toLocaleString();
+    node.querySelector('.doc-date').textContent = new Date(item.createdAt).toLocaleDateString('zh-CN');
+
+    const tagsContainer = node.querySelector('.doc-card-tags');
+    tagsContainer.innerHTML = '';
+    if (item.tags && item.tags.length > 0) {
+      for (const tag of item.tags.slice(0, 3)) {
+        const tagEl = document.createElement('span');
+        tagEl.className = 'doc-tag';
+        tagEl.textContent = tag;
+        tagsContainer.appendChild(tagEl);
+      }
+    }
 
     const previewButton = node.querySelector('.doc-preview-button');
     on(previewButton, 'click', () => {
@@ -937,6 +952,8 @@ async function runSearch(page = 1) {
     return;
   }
 
+  const startTime = performance.now();
+
   try {
     const payload = await request('/api/search', {
       method: 'POST',
@@ -946,6 +963,24 @@ async function runSearch(page = 1) {
         limit: SEARCH_PAGE_LIMIT
       })
     });
+
+    const latency = performance.now() - startTime;
+
+    // Update search metrics
+    if (searchLatency) {
+      setText(searchLatency, `${latency.toFixed(0)}ms`);
+    }
+    if (searchResultCount) {
+      setText(searchResultCount, String(payload.results?.length || 0));
+    }
+    if (searchAvgScore && payload.results?.length > 0) {
+      const avgScore = payload.results.reduce((sum, r) => sum + (r.similarity || 0), 0) / payload.results.length;
+      setText(searchAvgScore, `${(avgScore * 100).toFixed(1)}%`);
+    }
+    if (searchHitRate) {
+      const hitRate = payload.results?.length > 0 ? (payload.results.length / (currentSearchPayload.topK || 5) * 100) : 0;
+      setText(searchHitRate, `${hitRate.toFixed(0)}%`);
+    }
 
     renderResults(payload.results || []);
     renderSearchPagination(payload.pageInfo);
@@ -1025,6 +1060,11 @@ async function activateView(view) {
   if (nextView === 'monitor') {
     await Promise.allSettled([loadHealth(), loadMetrics()]);
     startMetricsAutoRefresh();
+    return;
+  }
+
+  if (nextView === 'search') {
+    // Search page is self-contained, no special loading needed
     return;
   }
 

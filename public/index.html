@@ -100,6 +100,7 @@
 
         <nav id="sidebar-nav" class="sidebar-nav" aria-label="页面目录">
           <button class="nav-item active" type="button" data-view="monitor">数据监控</button>
+          <button class="nav-item" type="button" data-view="search">检索测试</button>
           <button class="nav-item" type="button" data-view="documents">文档管理</button>
           <button class="nav-item" type="button" data-view="api">API 管理</button>
           <button class="nav-item" type="button" data-view="about">关于</button>
@@ -278,115 +279,143 @@
           </div>
         </section>
 
+        <section id="page-search" data-page="search" class="panel content-section search-panel hidden">
+          <div class="search-header">
+            <div class="search-title-group">
+              <p class="eyebrow">Vector Search Testing</p>
+              <h2>检索测试</h2>
+              <p class="search-subtitle">输入自然语言问题测试语义检索效果</p>
+            </div>
+          </div>
+
+          <div class="search-lab">
+            <div class="search-input-section">
+              <form id="search-form" class="search-form">
+                <div class="search-input-wrapper">
+                  <textarea
+                    id="query"
+                    name="query"
+                    rows="3"
+                    placeholder="例如：Redis 如何实现向量检索？支持哪些距离算法？…"
+                    autocomplete="off"
+                    required
+                  ></textarea>
+                  <button type="submit" class="primary search-submit-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="11" cy="11" r="8"/>
+                      <path d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    搜索
+                  </button>
+                </div>
+                <div class="search-filters">
+                  <div class="search-filter-item">
+                    <label>Top K</label>
+                    <input id="topK" name="topK" type="number" min="1" max="20" value="5" />
+                  </div>
+                  <div class="search-filter-item">
+                    <label>来源</label>
+                    <input id="search-source" name="search-source" autocomplete="off" placeholder="可选" />
+                  </div>
+                  <div class="search-filter-item">
+                    <label>标签</label>
+                    <input id="search-tags" name="search-tags" autocomplete="off" placeholder="可选" />
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            <div class="search-metrics" id="search-metrics">
+              <div class="metric-chip">
+                <span class="metric-chip-label">耗时</span>
+                <span class="metric-chip-value" id="search-latency">—</span>
+              </div>
+              <div class="metric-chip">
+                <span class="metric-chip-label">命中率</span>
+                <span class="metric-chip-value" id="search-hit-rate">—</span>
+              </div>
+              <div class="metric-chip">
+                <span class="metric-chip-label">结果数</span>
+                <span class="metric-chip-value" id="search-result-count">—</span>
+              </div>
+              <div class="metric-chip">
+                <span class="metric-chip-label">相似度</span>
+                <span class="metric-chip-value" id="search-avg-score">—</span>
+              </div>
+            </div>
+
+            <div class="search-results-section">
+              <div class="search-results-header">
+                <span id="search-count">0 条结果</span>
+                <div class="pagination-controls">
+                  <button id="search-page-prev" class="ghost" type="button">上一页</button>
+                  <span id="search-page-info">1 / 1</span>
+                  <button id="search-page-next" class="ghost" type="button">下一页</button>
+                </div>
+              </div>
+              <div class="results" id="results"></div>
+            </div>
+          </div>
+        </section>
+
         <section id="page-documents" data-page="documents" class="panel content-section docs-panel hidden">
-          <div class="section-head section-head-split">
-            <div>
-              <p class="eyebrow">文档中心</p>
+          <div class="docs-header">
+            <div class="docs-title-group">
+              <p class="eyebrow">Document Center</p>
               <h2>文档管理</h2>
-              <p>检索知识库、筛选来源和标签，并通过分页控件浏览结果。</p>
+              <p class="docs-subtitle">管理知识库文档，添加、筛选与维护</p>
             </div>
-            <button id="document-create-btn" class="primary button-link" type="button">新建文档</button>
+            <button id="document-create-btn" class="primary button-link" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              新建文档
+            </button>
           </div>
 
-          <div class="document-query-panel">
-            <div class="workspace-head">
-              <h3>语义检索（问答）</h3>
-              <p>输入问题后按语义检索文档，可附加来源/标签范围，结果按相似度排序。</p>
-            </div>
-            <form id="search-form" class="stack">
-              <label>
-                问题描述
-                <textarea
-                  id="query"
-                  name="query"
-                  rows="4"
-                  placeholder="例如 Redis 如何支持向量检索？…"
-                  autocomplete="off"
-                  required
-                ></textarea>
+          <div class="docs-toolbar">
+            <form id="document-filter-form" class="docs-filter-form">
+              <div class="docs-filter-row">
+                <div class="filter-field">
+                  <input id="document-keyword" name="document-keyword" autocomplete="off" placeholder="搜索文档内容…" />
+                </div>
+                <div class="filter-field">
+                  <input id="document-source" name="document-source" autocomplete="off" placeholder="来源" />
+                </div>
+                <div class="filter-field">
+                  <input id="document-tags" name="document-tags" autocomplete="off" placeholder="标签" />
+                </div>
+                <button type="submit" class="ghost">筛选</button>
+                <button type="button" class="ghost reset-btn" id="document-filter-reset">重置</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="docs-stats-bar">
+            <span id="documents-count">0 条文档</span>
+            <div class="pagination-controls docs-pagination">
+              <label class="inline-control">
+                每页
+                <select id="page-limit">
+                  <option value="6">6</option>
+                  <option value="12">12</option>
+                  <option value="24">24</option>
+                </select>
               </label>
-
-              <div class="grid-3">
-                <label>
-                  Top K
-                  <input id="topK" name="topK" type="number" min="1" max="20" value="5" />
-                </label>
-                <label>
-                  来源范围（可选）
-                  <input id="search-source" name="search-source" autocomplete="off" placeholder="例如 redis-docs…" />
-                </label>
-                <label>
-                  标签范围（可选）
-                  <input id="search-tags" name="search-tags" autocomplete="off" placeholder="例如 redis,rag…" />
-                </label>
-              </div>
-
-              <button type="submit" class="primary">开始语义检索</button>
-            </form>
-
-            <div class="panel-meta results-meta">
-              <span id="search-count">0 条检索结果</span>
-              <div class="pagination-controls">
-                <button id="search-page-prev" class="ghost" type="button">上一页</button>
-                <span id="search-page-info">1 / 1</span>
-                <button id="search-page-next" class="ghost" type="button">下一页</button>
-              </div>
+              <button id="page-first" class="ghost" type="button">首页</button>
+              <button id="page-prev" class="ghost" type="button">上一页</button>
+              <span id="page-info">1 / 1</span>
+              <button id="page-next" class="ghost" type="button">下一页</button>
+              <button id="page-last" class="ghost" type="button">末页</button>
+              <label class="inline-control">
+                跳转
+                <input id="page-jump" name="page-jump" type="number" min="1" value="1" inputmode="numeric" />
+              </label>
+              <button id="page-go" class="ghost" type="button">Go</button>
             </div>
-
-            <div class="results" id="results"></div>
           </div>
 
-          <div class="document-list-panel">
-            <div class="workspace-head">
-              <h3>文档库筛选（列表）</h3>
-              <p>按关键字、来源和标签筛选已有文档，适合做内容盘点与维护。</p>
-            </div>
-            <form id="document-filter-form" class="stack compact-stack">
-              <div class="grid-3">
-                <label>
-                  关键字索引
-                  <input id="document-keyword" name="document-keyword" autocomplete="off" placeholder="按文档内容筛选…" />
-                </label>
-                <label>
-                  来源
-                  <input id="document-source" name="document-source" autocomplete="off" placeholder="例如 redis-docs…" />
-                </label>
-                <label>
-                  标签
-                  <input id="document-tags" name="document-tags" autocomplete="off" placeholder="例如 redis,rag…" />
-                </label>
-              </div>
-              <div class="filter-actions">
-                <button type="submit" class="ghost">筛选文档</button>
-                <button type="button" class="ghost" id="document-filter-reset">重置筛选</button>
-              </div>
-            </form>
-
-            <div class="panel-meta">
-              <span id="documents-count">0 条文档</span>
-              <div class="pagination-controls">
-                <label class="inline-control">
-                  每页
-                  <select id="page-limit">
-                    <option value="3">3</option>
-                    <option value="6" selected>6</option>
-                    <option value="12">12</option>
-                  </select>
-                </label>
-                <button id="page-first" class="ghost" type="button">首页</button>
-                <button id="page-prev" class="ghost" type="button">上一页</button>
-                <span id="page-info">1 / 1</span>
-                <button id="page-next" class="ghost" type="button">下一页</button>
-                <button id="page-last" class="ghost" type="button">末页</button>
-                <label class="inline-control">
-                  跳转
-                    <input id="page-jump" name="page-jump" type="number" min="1" value="1" inputmode="numeric" />
-                </label>
-                <button id="page-go" class="ghost" type="button">Go</button>
-              </div>
-            </div>
-            <div id="documents" class="documents"></div>
-          </div>
+          <div id="documents" class="documents-grid"></div>
         </section>
 
         <section id="page-api" data-page="api" class="panel content-section api-panel hidden">
@@ -531,19 +560,19 @@
 
     <template id="document-template">
       <article class="doc-card">
-        <div class="result-top">
-          <strong class="doc-title"></strong>
-          <div class="doc-actions">
-            <button class="ghost doc-preview-button" type="button">全屏查看</button>
+        <div class="doc-card-header">
+          <strong class="doc-card-title"></strong>
+          <div class="doc-card-actions">
+            <button class="ghost doc-preview-button" type="button">查看</button>
             <button class="ghost danger doc-delete-button" type="button">删除</button>
           </div>
         </div>
-        <p class="doc-content"></p>
-        <div class="meta-row">
-          <span class="doc-source"></span>
-          <span class="doc-tags"></span>
-          <span class="doc-date"></span>
+        <p class="doc-card-preview"></p>
+        <div class="doc-card-meta">
+          <span class="doc-card-meta-item doc-source"></span>
+          <span class="doc-card-meta-item doc-date"></span>
         </div>
+        <div class="doc-card-tags"></div>
       </article>
     </template>
 
