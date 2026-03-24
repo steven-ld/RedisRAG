@@ -96,6 +96,9 @@ const documentsContainer = first('#documents', '#document-list');
 const resultsContainer = first('#results', '#search-results');
 const healthStatus = first('#health-status', '#monitor-health-status');
 const healthMeta = first('#health-meta', '#monitor-health-meta');
+const healthIndicator = first('#health-indicator');
+const healthIndex = first('#health-index');
+const healthDims = first('#health-dims');
 const resultTemplate = first('#result-template');
 const documentTemplate = first('#document-template');
 const documentsCount = first('#documents-count', '#document-count');
@@ -158,6 +161,8 @@ const aboutStatusList = first('#about-status-list', '#about-system-status');
 const aboutHealthStatus = first('#about-health-status');
 const aboutEmbeddingProvider = first('#about-embedding-provider');
 const aboutIndexName = first('#about-index-name');
+const aboutEmbeddingModel = first('#about-embedding-model');
+const aboutUptime = first('#about-uptime');
 const aboutLoginUser = first('#about-login-user');
 const aboutPasswordState = first('#about-password-state');
 const aboutRedisHitRate = first('#about-redis-hit-rate');
@@ -430,14 +435,24 @@ function setNavActive(view) {
 }
 
 function updateHealthSummary(health, errorMessage = '') {
-  setText(healthStatus, health ? '在线' : '异常');
+  const status = health ? '在线' : '异常';
+  setText(healthStatus, status);
+
+  if (healthIndicator) {
+    healthIndicator.className = 'status-indicator ' + (health ? 'online' : 'offline');
+  }
+
+  if (healthIndex) {
+    setText(healthIndex, health?.indexName || '-');
+  }
+  if (healthDims) {
+    setText(healthDims, health?.vectorDimension || '-');
+  }
+
   if (!healthMeta) return;
 
   if (health) {
-    setText(
-      healthMeta,
-      `Embedding: ${health.embeddingProvider || '-'} | Index: ${health.indexName || '-'}`
-    );
+    setText(healthMeta, health.errorMessage || 'Redis 连接正常');
   } else {
     setText(healthMeta, errorMessage || '正在检测 Redis 与索引');
   }
@@ -446,47 +461,15 @@ function updateHealthSummary(health, errorMessage = '') {
 function renderAbout() {
   const health = state.health || {};
   const metrics = state.metrics || {};
-  const session = state.session || {};
   const version = health.version || health.appVersion || APP_VERSION;
 
   setText(aboutVersion, version);
-  setText(aboutVersionHint, health.version ? '来自 health 接口' : '来自前端常量');
-  setText(aboutHealthStatus, health.ok === false ? '异常' : (health.ok === true ? '在线' : '-'));
-  setText(aboutEmbeddingProvider, health.embeddingProvider || '-');
   setText(aboutIndexName, health.indexName || '-');
-  setText(aboutLoginUser, session.username || '-');
-  setText(aboutPasswordState, state.requirePasswordChange ? '首次登录待改密' : '已完成改密');
-  setText(aboutRedisHitRate, formatPercent(metrics.stats?.redisHitRate));
-  setText(aboutTotalCommands, metrics.stats?.totalCommands?.toLocaleString?.() || '0');
-  setText(aboutSearchHitRate, formatPercent(metrics.search?.hitRate));
-  setText(aboutMcpQpm, String(metrics.mcp?.queriesLastMinute ?? '0'));
-  setText(aboutLastQuery, formatDateTime(metrics.search?.lastQueryAt));
-  setText(aboutMemoryUsage, metrics.memory?.usedHuman || formatBytes(metrics.memory?.used));
-  setText(aboutMemoryRss, formatBytes(metrics.memory?.rss));
+  setText(aboutEmbeddingProvider, health.embeddingProvider || '-');
 
-  if (!aboutStatusList) return;
-
-  const rows = [
-    ['版本', version],
-    ['健康状态', health.ok === false ? '异常' : '在线'],
-    ['Embedding', health.embeddingProvider || '-'],
-    ['索引', health.indexName || '-'],
-    ['当前用户', session.username || '-'],
-    ['改密状态', state.requirePasswordChange ? '首次登录待改密' : '已完成改密'],
-    ['Redis 命中率', formatPercent(metrics.stats?.redisHitRate)],
-    ['总命令数', metrics.stats?.totalCommands?.toLocaleString?.() || '0'],
-    ['搜索命中率', formatPercent(metrics.search?.hitRate)],
-    ['MCP 近 1 分钟查询', String(metrics.mcp?.queriesLastMinute ?? '0')]
-  ];
-
-  aboutStatusList.innerHTML = rows
-    .map(([label, value]) => `
-      <article class="metric-card about-card">
-        <p class="metric-label">${escapeHtml(label)}</p>
-        <strong>${escapeHtml(value)}</strong>
-      </article>
-    `)
-    .join('');
+  if (aboutEmbeddingModel && health.embeddingModel) {
+    setText(aboutEmbeddingModel, health.embeddingModel);
+  }
 }
 
 async function request(url, options = {}) {

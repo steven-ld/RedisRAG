@@ -388,9 +388,296 @@ button,
   margin-top: auto;
 }
 
-.hero-card-label {
+/* ── System Status Panel ── */
+.status-panel {
+  background: linear-gradient(135deg, rgba(255, 250, 242, 0.92), rgba(248, 242, 231, 0.88));
+  border: 1px solid rgba(77, 62, 42, 0.14);
+  border-radius: 20px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
   color: var(--muted);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  position: relative;
+}
+
+.status-dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: inherit;
+  opacity: 0.4;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status-indicator.online .status-dot {
+  background: var(--success);
+  box-shadow: 0 0 8px rgba(41, 95, 78, 0.5);
+}
+
+.status-indicator.online .status-dot::after {
+  background: var(--success);
+}
+
+.status-indicator.offline .status-dot {
+  background: var(--danger);
+  box-shadow: 0 0 8px rgba(143, 47, 47, 0.4);
+}
+
+.status-indicator.offline .status-dot::after {
+  background: var(--danger);
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.8); opacity: 0; }
+}
+
+.status-text {
   font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.status-body {
+  display: grid;
+  gap: 8px;
+}
+
+.status-meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.status-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  padding: 4px 0;
+  border-bottom: 1px dashed rgba(77, 62, 42, 0.1);
+}
+
+.status-key {
+  color: var(--muted);
+}
+
+.status-val {
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.logout-btn {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  padding: 8px 14px;
+}
+
+/* ── About Hero ── */
+.about-hero {
+  text-align: center;
+  padding: 32px 24px 40px;
+  position: relative;
+  overflow: hidden;
+}
+
+.about-hero::before {
+  content: "";
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(191, 91, 44, 0.12), transparent 70%);
+  pointer-events: none;
+}
+
+.about-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--accent-strong);
+  background: rgba(191, 91, 44, 0.1);
+  padding: 6px 14px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+}
+
+.about-title {
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+}
+
+.about-version {
+  font-size: 1.4rem;
+  font-weight: 300;
+  color: var(--accent);
+  margin: 0 0 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.about-tagline {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0;
+  letter-spacing: 0.08em;
+}
+
+/* ── Info Cards Grid ── */
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.info-card {
+  display: flex;
+  gap: 14px;
+  padding: 18px;
+  background: linear-gradient(135deg, rgba(255, 252, 247, 0.9), rgba(248, 243, 233, 0.85));
+  border: 1px solid rgba(77, 62, 42, 0.1);
+  border-radius: 18px;
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+.info-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(73, 52, 30, 0.08);
+}
+
+.info-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  background: rgba(191, 91, 44, 0.1);
+  border-radius: 12px;
+  color: var(--accent-strong);
+}
+
+.info-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.info-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.info-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.info-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+/* ── Quick Commands ── */
+.about-commands {
+  background: linear-gradient(135deg, rgba(32, 25, 19, 0.96), rgba(45, 35, 27, 0.98));
+  border-radius: 22px;
+  padding: 24px;
+  color: #f7efe6;
+}
+
+.about-commands h3 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: rgba(247, 239, 230, 0.6);
+  margin: 0 0 16px;
+  font-weight: 500;
+}
+
+.command-list {
+  display: grid;
+  gap: 10px;
+}
+
+.command-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.command-code {
+  font-family: "SFMono-Regular", "Menlo", monospace;
+  font-size: 0.9rem;
+  color: #e8c9a8;
+  background: transparent;
+  padding: 0;
+}
+
+.command-desc {
+  font-size: 0.82rem;
+  color: rgba(247, 239, 230, 0.5);
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .about-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .about-hero {
+    padding: 24px 16px 32px;
+  }
 }
 
 .section-head {

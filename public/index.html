@@ -105,11 +105,30 @@
           <button class="nav-item" type="button" data-view="about">关于</button>
         </nav>
 
-        <div class="sidebar-footer hero-card" id="health-card">
-          <span class="hero-card-label">服务状态</span>
-          <strong id="health-status">加载中</strong>
-          <span id="health-meta">正在检测 Redis 与索引</span>
-          <button id="logout-btn" class="ghost" type="button">退出登录</button>
+        <div class="sidebar-footer" id="health-card">
+          <div class="status-panel">
+            <div class="status-header">
+              <span class="status-label">服务状态</span>
+              <div class="status-indicator" id="health-indicator">
+                <span class="status-dot"></span>
+                <span class="status-text" id="health-status">检测中</span>
+              </div>
+            </div>
+            <div class="status-body">
+              <div class="status-meta" id="health-meta">正在连接 Redis 与索引...</div>
+              <div class="status-details">
+                <div class="status-row">
+                  <span class="status-key">索引</span>
+                  <span class="status-val" id="health-index">—</span>
+                </div>
+                <div class="status-row">
+                  <span class="status-key">向量维度</span>
+                  <span class="status-val" id="health-dims">—</span>
+                </div>
+              </div>
+            </div>
+            <button id="logout-btn" class="ghost logout-btn" type="button">退出登录</button>
+          </div>
         </div>
       </aside>
 
@@ -349,35 +368,88 @@
         </section>
 
         <section id="page-about" data-page="about" class="panel content-section about-panel hidden">
-          <div class="section-head">
-            <p class="eyebrow">系统信息</p>
-            <h2>关于</h2>
-            <p>展示系统版本与运行信息占位，后续可接入真实环境变量或实例状态。</p>
+          <div class="about-hero">
+            <div class="about-badge">Redis Vector Search</div>
+            <h2 class="about-title">Redis-RAG 控制台</h2>
+            <p class="about-version" id="about-version">v1.0.0</p>
+            <p class="about-tagline">语义检索 · 向量数据库 · MCP 协议</p>
           </div>
 
           <div class="about-grid">
-            <article class="about-card">
-              <p class="metric-label">系统版本</p>
-              <strong id="about-version">v1.0.0</strong>
-              <span id="about-version-hint">来自前端常量</span>
+            <article class="info-card">
+              <div class="info-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 6v6l4 2"/>
+                </svg>
+              </div>
+              <div class="info-content">
+                <span class="info-label">运行时长</span>
+                <strong class="info-value" id="about-uptime">—</strong>
+                <span class="info-hint">服务自启动以来的时间</span>
+              </div>
             </article>
-            <article class="about-card">
-              <p class="metric-label">运行环境</p>
-              <strong>生产 / 占位</strong>
-              <span>待接入服务发现与实例元信息</span>
+
+            <article class="info-card">
+              <div class="info-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M4 7h16M4 12h16M4 17h10"/>
+                </svg>
+              </div>
+              <div class="info-content">
+                <span class="info-label">索引名称</span>
+                <strong class="info-value" id="about-index-name">—</strong>
+                <span class="info-hint">Redis Search 索引标识</span>
+              </div>
             </article>
-            <article class="about-card">
-              <p class="metric-label">部署状态</p>
-              <strong id="about-health-status">在线 / 占位</strong>
-              <span id="about-index-name">运行信息可由后端心跳接口填充</span>
+
+            <article class="info-card">
+              <div class="info-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+                  <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>
+                </svg>
+              </div>
+              <div class="info-content">
+                <span class="info-label">向量维度</span>
+                <strong class="info-value" id="about-embedding-provider">—</strong>
+                <span class="info-hint">Embedding 模型维度</span>
+              </div>
             </article>
-            <article class="about-card">
-              <p class="metric-label">维护说明</p>
-              <strong id="about-embedding-provider">可扩展</strong>
-              <span id="about-login-user">当前页面仅做前端结构与样式分区</span>
+
+            <article class="info-card">
+              <div class="info-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                  <path d="M2 17l10 5 10-5"/>
+                  <path d="M2 12l10 5 10-5"/>
+                </svg>
+              </div>
+              <div class="info-content">
+                <span class="info-label">嵌入模型</span>
+                <strong class="info-value" id="about-embedding-model">—</strong>
+                <span class="info-hint">当前使用的 Embedding</span>
+              </div>
             </article>
           </div>
-          <div id="about-status-list" class="about-status-grid"></div>
+
+          <div class="about-commands">
+            <h3>快速命令</h3>
+            <div class="command-list">
+              <div class="command-item">
+                <code class="command-code">/api/search</code>
+                <span class="command-desc">语义检索接口</span>
+              </div>
+              <div class="command-item">
+                <code class="command-code">/api/metrics</code>
+                <span class="command-desc">系统指标接口</span>
+              </div>
+              <div class="command-item">
+                <code class="command-code">/api/documents</code>
+                <span class="command-desc">文档管理接口</span>
+              </div>
+            </div>
+          </div>
         </section>
       </main>
     </div>
