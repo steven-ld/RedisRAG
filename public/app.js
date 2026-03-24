@@ -799,8 +799,8 @@ async function loadMetrics() {
     setText(mcpLastQuery, formatDateTime(payload.search.lastQueryAt));
     setText(mcpHits, payload.search.hits);
     setText(mcpQueries, payload.search.queries);
-    setText(mcpQpm, payload.mcp.queriesLastMinute);
-    setText(mcpQp5m, payload.mcp.queriesLastFiveMinutes);
+    setText(mcpQpm, payload.mcp.queriesLastHour);
+    setText(mcpQp5m, payload.mcp.queriesLastFiveHours);
     setText(mcpMissRate, formatPercent(payload.search.missRate));
 
     // Update progress bars

@@ -641,14 +641,14 @@ export async function listDocumentsPaginated({ page = 1, limit = 6, filters = {}
 
 export async function getMetrics() {
   const now = Date.now();
-  const oneMinuteAgo = now - (1000 * 60);
-  const fiveMinutesAgo = now - (1000 * 60 * 5);
-  const [memoryInfo, statsInfo, searchCounters, minuteQueries, fiveMinuteQueries] = await Promise.all([
+  const oneHourAgo = now - (1000 * 60 * 60);
+  const fiveHoursAgo = now - (1000 * 60 * 60 * 5);
+  const [memoryInfo, statsInfo, searchCounters, hourQueries, fiveHourQueries] = await Promise.all([
     client.info('memory'),
     client.info('stats'),
     client.hGetAll(searchMetricsKey),
-    client.zCount(searchTimelineKey, oneMinuteAgo, '+inf'),
-    client.zCount(searchTimelineKey, fiveMinutesAgo, '+inf')
+    client.zCount(searchTimelineKey, oneHourAgo, '+inf'),
+    client.zCount(searchTimelineKey, fiveHoursAgo, '+inf')
   ]);
 
   const memory = parseInfo(memoryInfo);
@@ -695,8 +695,8 @@ export async function getMetrics() {
       lastQueryAt
     },
     mcp: {
-      queriesLastMinute: Number(minuteQueries || 0),
-      queriesLastFiveMinutes: Number(fiveMinuteQueries || 0)
+      queriesLastHour: Number(hourQueries || 0),
+      queriesLastFiveHours: Number(fiveHourQueries || 0)
     }
   };
 }
