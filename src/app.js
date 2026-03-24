@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
+import { MCP_TOOLS, executeMcpTool } from './mcp-tools.js';
 import {
   changePasswordWithToken,
   connectRedis,
@@ -40,6 +41,256 @@ function getBearerToken(request) {
 function getApiKeyToken(request) {
   const value = request.headers['x-api-key'];
   return value ? String(value).trim() : '';
+}
+
+function getMcpApiKeyToken(request) {
+  const bearer = getBearerToken(request);
+  if (bearer) {
+    return bearer;
+  }
+
+  return getApiKeyToken(request);
+}
+
+function isJsonRpcNotification(message) {
+  return message && typeof message === 'object' && !Array.isArray(message) && !Object.prototype.hasOwnProperty.call(message, 'id');
+}
+
+function normalizeJsonRpcId(id) {
+  if (id == null) {
+    return null;
+  }
+
+  return id;
+}
+
+function buildMcpTextResponse(payload) {
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(payload, null, 2)
+      }
+    ]
+  };
+}
+
+function buildMcpErrorResponse(message, details) {
+  return {
+    isError: true,
+    content: [
+      {
+        type: 'text',
+        text: details ? `${message}\n${details}` : message
+      }
+    ]
+  };
+}
+
+function getMcpProtocolVersion(requestedVersion) {
+  const normalized = String(requestedVersion || '').trim();
+  const supportedVersions = new Set([
+    '2025-11-25',
+    '2025-06-18',
+    '2025-03-26',
+    '2024-11-05'
+  ]);
+
+  if (supportedVersions.has(normalized)) {
+    return normalized;
+  }
+
+  return '2025-11-25';
+}
+
+function buildMcpInitializeResult(requestedProtocolVersion) {
+  return {
+    protocolVersion: getMcpProtocolVersion(requestedProtocolVersion),
+    capabilities: {
+      tools: {}
+    },
+    serverInfo: {
+      name: 'redis-rag-http-mcp',
+      version: '1.0.0'
+    },
+    instructions: 'Use search_documents and list_documents to query RedisRAG content over HTTP.'
+  };
+}
+
+async function handleMcpToolCall(id, params) {
+  const name = params && params.name ? String(params.name).trim() : '';
+  const args = params && typeof params.arguments === 'object' && params.arguments !== null && !Array.isArray(params.arguments)
+    ? params.arguments
+    : {};
+
+  if (!name) {
+    return {
+      jsonrpc: '2.0',
+      id: normalizeJsonRpcId(id),
+      result: buildMcpErrorResponse('Tool name is required')
+    };
+  }
+
+  const execution = await executeMcpTool(name, args);
+  if (!execution.ok) {
+    return {
+      jsonrpc: '2.0',
+      id: normalizeJsonRpcId(id),
+      result: buildMcpErrorResponse(`Tool call failed: ${name}`, execution.error)
+    };
+  }
+
+  return {
+    jsonrpc: '2.0',
+    id: normalizeJsonRpcId(id),
+    result: buildMcpTextResponse({
+      tool: name,
+      result: execution.result
+    })
+  };
+}
+
+async function handleMcpJsonRpcMessage(message) {
+  if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    return {
+      jsonrpc: '2.0',
+      id: null,
+      error: {
+        code: -32600,
+        message: 'Invalid request'
+      }
+    };
+  }
+
+  if (message.jsonrpc !== '2.0') {
+    return {
+      jsonrpc: '2.0',
+      id: normalizeJsonRpcId(message.id),
+      error: {
+        code: -32600,
+        message: 'Invalid JSON-RPC version'
+      }
+    };
+  }
+
+  if (typeof message.method !== 'string' || !message.method.trim()) {
+    return {
+      jsonrpc: '2.0',
+      id: normalizeJsonRpcId(message.id),
+      error: {
+        code: -32600,
+        message: 'Missing method'
+      }
+    };
+  }
+
+  const method = String(message.method).trim();
+  const params = message.params && typeof message.params === 'object' ? message.params : {};
+  const id = normalizeJsonRpcId(message.id);
+
+  if (method === 'initialize') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: buildMcpInitializeResult(params.protocolVersion)
+    };
+  }
+
+  if (method === 'ping') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {}
+    };
+  }
+
+  if (method === 'tools/list') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: { tools: MCP_TOOLS }
+    };
+  }
+
+  if (method === 'tools/call') {
+    return handleMcpToolCall(id, params);
+  }
+
+  return {
+    jsonrpc: '2.0',
+    id,
+    error: {
+      code: -32601,
+      message: `Method not found: ${method}`
+    }
+  };
+}
+
+async function authenticateMcpRequest(request, response) {
+  const token = getMcpApiKeyToken(request);
+  if (!token) {
+    response.status(401).json({ error: 'missing api key' });
+    return null;
+  }
+
+  const apiKeySession = await verifyMcpApiKey(token);
+  if (!apiKeySession) {
+    response.status(401).json({ error: 'invalid api key' });
+    return null;
+  }
+
+  return apiKeySession;
+}
+
+async function handleMcpHttpPayload(request, response) {
+  if (!(await authenticateMcpRequest(request, response))) {
+    return;
+  }
+
+  const payload = request.body;
+  const processItem = async (item) => {
+    if (isJsonRpcNotification(item)) {
+      return null;
+    }
+
+    return handleMcpJsonRpcMessage(item);
+  };
+
+  if (Array.isArray(payload)) {
+    if (!payload.length) {
+      return response.status(400).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32600,
+          message: 'Invalid request'
+        },
+        id: null
+      });
+    }
+
+    const results = await Promise.all(payload.map(async (item) => processItem(item)));
+    const filtered = results.filter(Boolean);
+    if (!filtered.length) {
+      return response.status(204).end();
+    }
+
+    return response.json(filtered);
+  }
+
+  if (isJsonRpcNotification(payload)) {
+    return response.status(204).end();
+  }
+
+  const result = await processItem(payload);
+  if (!result) {
+    return response.status(204).end();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(result, 'error')) {
+    return response.status(200).json(result);
+  }
+
+  return response.json(result);
 }
 
 app.post('/api/auth/login', asyncHandler(async (request, response) => {
@@ -284,6 +535,10 @@ app.post('/api/search', asyncHandler(async (request, response) => {
   });
 
   return response.json(results);
+}));
+
+app.post('/mcp', asyncHandler(async (request, response) => {
+  await handleMcpHttpPayload(request, response);
 }));
 
 app.use((error, _request, response, _next) => {

@@ -1,56 +1,72 @@
-# RedisRAG
+# Redis-RAG
 
-RedisRAG 是一个基于 **JavaScript + Redis Stack** 的轻量 RAG 控制台与 API 服务，支持文档入库、语义检索、文档筛选、标准 MCP 检索接入和 API Key 管理。
+[![Node.js](https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Redis Stack](https://img.shields.io/badge/Redis-Stack-red?logo=redis&logoColor=white)](https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/)
+[![MCP](https://img.shields.io/badge/Protocol-MCP-blue)](https://modelcontextprotocol.io/)
+[![Docker](https://img.shields.io/badge/Run_with-Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 
-适合场景：
-- 中小规模知识库检索
-- 给 AI Agent 提供可写入的文档库
-- 通过 `/api/metrics` 做检索健康度监控
+一个基于 **JavaScript + Redis Stack** 的轻量 RAG 服务，支持：
 
----
+- HTTP 文档检索与管理 API
+- 标准 MCP (`/mcp`) 远程工具调用
+- 控制台页面（登录、监控、文档管理、API Key 管理）
 
-## 1. 核心能力
+如果你要把检索能力分发给 AI 客户端（Claude/Cursor 等），调用方通常只需要两项：
 
-- 文档管理：创建、删除、分页、筛选（关键词/来源/标签）
-- 语义检索：向量检索 + 来源/标签过滤 + 分页
-- 标准 MCP 检索：面向 AI 客户端暴露检索工具
-- 监控指标：Redis 内存、命中率、搜索命中率、请求统计
-- 鉴权体系：账号密码登录 + Token + 首次改密
-- API Key：为 HTTP 监控接口生成/吊销长期 key
+- `MCP_URL`
+- `MCP_TOKEN`
 
 ---
 
-## 2. 快速开始（推荐 Docker）
+## 目录
 
-### 2.1 一条命令启动
+- [为什么用 Redis-RAG](#为什么用-redis-rag)
+- [5 分钟快速开始](#5-分钟快速开始)
+- [给 AI 客户端的最短接入](#给-ai-客户端的最短接入)
+- [核心 API 一览](#核心-api-一览)
+- [MCP 协议支持](#mcp-协议支持)
+- [配置项](#配置项)
+- [系统架构](#系统架构)
+- [项目结构](#项目结构)
+- [FAQ](#faq)
+- [Roadmap](#roadmap)
+
+---
+
+## 为什么用 Redis-RAG
+
+- 开箱即用：`docker compose up` 后可直接体验完整链路
+- 双入口设计：既支持传统 HTTP API，也支持标准 MCP
+- 文档过滤能力：语义检索可结合 `keyword/source/tags` 做混合筛选
+- 认证闭环：登录、首次改密、长期 API Key、Key 吊销都内置
+- 可观测性：提供 `/api/health` 与 `/api/metrics`
+
+---
+
+## 5 分钟快速开始
+
+### 1) 启动服务
 
 ```bash
+git clone https://github.com/steven-ld/RedisRAG.git
+cd RedisRAG
 docker compose up --build -d
 ```
 
-访问地址：
-- 登录页: [http://localhost:3000/login.html](http://localhost:3000/login.html)
-- 控制台: [http://localhost:3000](http://localhost:3000)
-- Redis Insight: [http://localhost:8001](http://localhost:8001)
+启动后可访问：
 
-停止服务：
+- 控制台登录页: `http://localhost:3000/login.html`
+- 控制台首页: `http://localhost:3000`
+- Redis Insight: `http://localhost:8001`
 
-```bash
-docker compose down
-```
-
-### 2.2 默认账号
+### 2) 默认账号登录（首次会强制改密）
 
 - 用户名：`amdin`
 - 密码：`redisrag`
 
-注意：首次登录会强制改密，改密后可继续当前会话。
+> 注意：代码中默认账号名是 `amdin`（不是 `admin`）。
 
----
-
-## 3. 接入路径（最短）
-
-### Step 1：登录获取 token
+### 3) 通过 API 获取会话 token
 
 ```bash
 curl -sS -X POST http://localhost:3000/api/auth/login \
@@ -58,7 +74,7 @@ curl -sS -X POST http://localhost:3000/api/auth/login \
   -d '{"username":"amdin","password":"redisrag"}'
 ```
 
-如果返回 `requirePasswordChange=true`，先改密：
+首次登录后，用返回 token 调用改密接口，获取 `full` 权限 token：
 
 ```bash
 curl -sS -X POST http://localhost:3000/api/auth/change-password \
@@ -67,24 +83,24 @@ curl -sS -X POST http://localhost:3000/api/auth/change-password \
   -d '{"newPassword":"your-new-password"}'
 ```
 
-### Step 2：写入一条文档
+### 4) 写入一条文档
 
 ```bash
 curl -sS -X POST http://localhost:3000/api/documents \
-  -H "Authorization: Bearer <TOKEN>" \
+  -H "Authorization: Bearer <FULL_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
-    "content":"Redis Stack supports vector search with HNSW index.",
+    "content":"Redis Stack supports vector similarity search with HNSW indexes.",
     "source":"redis-docs",
     "tags":["redis","vector","rag"]
   }'
 ```
 
-### Step 3：做一次语义检索
+### 5) 语义检索
 
 ```bash
 curl -sS -X POST http://localhost:3000/api/search \
-  -H "Authorization: Bearer <TOKEN>" \
+  -H "Authorization: Bearer <FULL_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
     "query":"Redis 如何支持向量检索？",
@@ -98,219 +114,253 @@ curl -sS -X POST http://localhost:3000/api/search \
 
 ---
 
-## 4. API 一览
+## 给 AI 客户端的最短接入
 
-### 4.1 认证
+### 1) 服务方创建 MCP Token
+
+`POST /api/auth/api-keys` 返回的 `key` 字段就是 `MCP_TOKEN`。
+
+```bash
+curl -sS -X POST http://localhost:3000/api/auth/api-keys \
+  -H "Authorization: Bearer <FULL_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"partner-a","expiresInDays":365}'
+```
+
+### 2) 分发给调用方两项配置
+
+```bash
+MCP_URL=https://your-domain.com/mcp
+MCP_TOKEN=<API_KEY>
+```
+
+### 3) 客户端配置示例（Claude / Cursor 通用思路）
+
+```json
+{
+  "mcpServers": {
+    "redis-rag": {
+      "url": "https://your-domain.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_MCP_TOKEN"
+      }
+    }
+  }
+}
+```
+
+### 4) 连通性验证
+
+```bash
+curl -sS -X POST "$MCP_URL" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $MCP_TOKEN" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":1,
+    "method":"initialize",
+    "params":{"protocolVersion":"2025-11-25","capabilities":{}}
+  }'
+```
+
+---
+
+## 核心 API 一览
+
+### 认证
 
 - `POST /api/auth/login`
 - `POST /api/auth/change-password`
 - `GET /api/auth/session`
 
-### 4.2 文档
+### 文档
 
 - `POST /api/documents` 新增文档
+- `GET /api/documents` 分页 + 条件筛选
 - `DELETE /api/documents/:id` 删除文档
-- `GET /api/documents` 文档分页 + 筛选
 
-`GET /api/documents` 查询参数：
-- `page`：页码（默认 1）
-- `limit`：每页数量（默认 6，最大 50）
-- `keyword`：按 `content` 模糊匹配（不区分大小写）
-- `source`：按来源精确匹配（不区分大小写）
-- `tags`：逗号分隔，任一标签命中即可，例如 `redis,rag`
+`GET /api/documents` 支持参数：
 
-示例：
+- `page` 默认 `1`
+- `limit` 默认 `6`，最大 `50`
+- `keyword` 内容模糊匹配
+- `source` 来源精确匹配
+- `tags` 逗号分隔，命中任一标签即可
 
-```bash
-curl -sS "http://localhost:3000/api/documents?page=1&limit=6&keyword=vector&source=redis-docs&tags=redis,rag" \
-  -H "Authorization: Bearer <TOKEN>"
-```
+### 检索
 
-### 4.3 检索
+- `POST /api/search`
 
-- `POST /api/search` 语义检索（支持分页、来源/标签/关键词过滤）
+支持参数：`query`, `topK`, `page`, `limit`, `keyword`, `source`, `tags`。
 
-### 4.4 监控
+### 监控
 
 - `GET /api/health`
 - `GET /api/metrics`
 
-### 4.5 API Key（监控接口）
+### API Key
 
-- `POST /api/auth/api-keys` 创建 key
+- `POST /api/auth/api-keys` 创建
 - `GET /api/auth/api-keys` 列表
 - `DELETE /api/auth/api-keys` 吊销
 
-用 API Key 访问监控：
+权限规则：
 
-```bash
-curl -sS http://localhost:3000/api/metrics \
-  -H "X-API-Key: <FULL_API_KEY>"
-```
+- API Key 可访问 `POST /mcp`
+- API Key 可访问 `GET /api/metrics`
+- API Key **不能**访问其他 `/api/*` 业务接口
 
 ---
 
-## 5. AI 自动添加文档（重点）
+## MCP 协议支持
 
-这个章节是给 AI Agent / 自动化任务直接接入用的。
+### HTTP MCP 入口
 
-### 5.1 推荐流程
+- `POST /mcp`
 
-1. 登录获取 token（或维护一个长期会话）
-2. 将待入库文本切分为 chunk
-3. 逐条调用 `POST /api/documents`
-4. 对失败请求重试（指数退避）
-5. 定期抽样调用 `/api/search` 做质量回归
+### 已实现方法
 
-### 5.2 最小可用：AI 直接写入文档
+- `initialize`
+- `ping`
+- `tools/list`
+- `tools/call`
+
+### 可用工具
+
+- `search_documents`
+- `list_documents`
+
+### 协议版本
+
+服务端支持并协商以下版本：
+
+- `2025-11-25`（默认）
+- `2025-06-18`
+- `2025-03-26`
+- `2024-11-05`
+
+### `tools/call` 示例
 
 ```bash
-curl -sS -X POST http://localhost:3000/api/documents \
-  -H "Authorization: Bearer <TOKEN>" \
+curl -sS -X POST "$MCP_URL" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $MCP_TOKEN" \
   -d '{
-    "content":"<AI 生成或抽取的知识文本>",
-    "source":"ai-ingestion",
-    "tags":["ai","auto-import"]
+    "jsonrpc":"2.0",
+    "id":2,
+    "method":"tools/call",
+    "params":{
+      "name":"search_documents",
+      "arguments":{
+        "query":"Redis vector search",
+        "topK":5,
+        "limit":5
+      }
+    }
   }'
 ```
 
-### 5.3 批量入库脚本模板（bash）
+---
+
+## 配置项
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `PORT` | `3000` | 服务端口 |
+| `REDIS_URL` | `redis://localhost:6379` | Redis 地址 |
+| `VECTOR_INDEX_NAME` | `rag_idx` | RediSearch 索引名 |
+| `VECTOR_KEY_PREFIX` | `doc:` | 文档键前缀 |
+| `EMBEDDING_PROVIDER` | `simple` | `simple` 或 `openai` |
+| `EMBEDDING_DIM` | `256` / `1536` | 向量维度（`openai` 通常为 `1536`） |
+| `OPENAI_API_KEY` | 空 | `EMBEDDING_PROVIDER=openai` 时必填 |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | OpenAI embedding 模型 |
+
+### 切换到 OpenAI Embedding
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-BASE_URL="http://localhost:3000"
-TOKEN="<TOKEN>"
-
-# demo: 你可以把这里换成从文件/数据库/消息队列读取
-DOCS=(
-  "Redis Stack supports vector similarity search."
-  "RAG pipeline usually includes chunking and retrieval."
-)
-
-for content in "${DOCS[@]}"; do
-  curl -sS -X POST "$BASE_URL/api/documents" \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{\"content\":\"$content\",\"source\":\"ai-batch\",\"tags\":[\"ai\",\"batch\"]}" >/dev/null
-  echo "ingested: $content"
-done
+EMBEDDING_PROVIDER=openai
+EMBEDDING_DIM=1536
+OPENAI_API_KEY=your_key
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
-
-### 5.4 给 AI 的实践建议（避免脏数据）
-
-- 每条文档尽量单主题、短段落（便于向量检索）
-- `source` 固定为稳定来源名（如 `notion-sync`、`confluence-bot`）
-- `tags` 使用受控词表（降低标签碎片化）
-- 入库前去重（可按内容 hash）
-- 建议保留原文链接到 `content` 或标签中，便于追溯
 
 ---
 
-## 6. 标准 MCP Server
+## 系统架构
 
-仓库提供标准的 MCP stdio 服务，适合 Claude Desktop、Cursor 等支持 MCP 的客户端直接接入检索能力。
+```mermaid
+flowchart LR
+  C1["Web Console"] --> APP["Express App"]
+  C2["AI Client (MCP)"] --> APP
+  APP --> REDIS["Redis Stack / RediSearch"]
+  APP --> OAI["OpenAI Embeddings (Optional)"]
 
-### 6.1 启动
+  APP --> A1["/api/* HTTP APIs"]
+  APP --> A2["/mcp JSON-RPC"]
+```
+
+---
+
+## 项目结构
+
+```text
+.
+├── src/
+│   ├── app.js          # HTTP 服务 + /mcp 入口
+│   ├── redis.js        # Redis 数据层、认证、检索、指标
+│   ├── mcp-tools.js    # MCP 工具定义与执行
+│   ├── mcp-server.js   # MCP stdio server（可选）
+│   ├── embeddings.js   # simple/openai 向量生成
+│   └── config.js       # 配置解析
+├── public/             # 控制台前端
+├── docker-compose.yml
+├── Dockerfile
+└── README.md
+```
+
+---
+
+## 本地开发
 
 ```bash
-npm run mcp:start
+npm install
+npm run dev
 ```
 
-默认会通过 `stdio` 与 MCP 客户端通信，不需要额外开放 HTTP 端口。
+其他脚本：
 
-### 6.2 工具清单
-
-- `search_documents`：语义检索文档，支持 `query`、`topK`、`page`、`limit`、`keyword`、`source`、`tags`
-- `list_documents`：分页列出文档，支持 `page`、`limit`、`keyword`、`source`、`tags`
-
-### 6.3 Claude Desktop 配置示例
-
-在 Claude Desktop 的 MCP 配置中加入类似下面的内容：
-
-```json
-{
-  "mcpServers": {
-    "redis-rag": {
-      "command": "npm",
-      "args": ["run", "mcp:start"],
-      "cwd": "/Users/ga666666/Desktop/Redis-RAG"
-    }
-  }
-}
-```
-
-如果你的环境里 `npm` 不在 PATH，也可以改成绝对路径，例如：
-
-```json
-{
-  "mcpServers": {
-    "redis-rag": {
-      "command": "/opt/homebrew/bin/npm",
-      "args": ["run", "mcp:start"],
-      "cwd": "/Users/ga666666/Desktop/Redis-RAG"
-    }
-  }
-}
-```
-
-### 6.4 Cursor 配置示例
-
-Cursor 也可以用同样的 stdio 启动方式，核心是 command + args + cwd：
-
-```json
-{
-  "mcpServers": {
-    "redis-rag": {
-      "command": "npm",
-      "args": ["run", "mcp:start"],
-      "cwd": "/Users/ga666666/Desktop/Redis-RAG"
-    }
-  }
-}
-```
-
-### 6.5 返回格式说明
-
-MCP 工具返回的是面向客户端消费的结构化结果，适合直接交给模型总结、引用或继续检索。它和 `/api/metrics` 这种监控接口不是一类能力。
+- `npm start`：生产方式启动
+- `npm run mcp:start`：启动 MCP stdio server
+- `npm run check`：基础语法检查
 
 ---
 
-## 7. MCP / Agent 监控接入
+## FAQ
 
-把 `/api/metrics` 作为 Agent 的只读监控数据源即可。这个接口只用于监控，不承担标准 MCP 检索能力。
+### 为什么我能登录但很多接口返回 `PASSWORD_CHANGE_REQUIRED`？
 
-建议最小采集字段：
-- `memory.usageRate`
-- `stats.redisHitRate`
-- `search.hitRate`
-- `search.missRate`
-- `mcp.queriesLastMinute`
+这是首次登录保护机制。你需要先调用 `POST /api/auth/change-password`，拿到新的 full token。
 
----
+### `/mcp` 和 `/api/metrics` 有什么区别？
 
-## 8. 环境变量
+- `/mcp`：给 AI 客户端调用检索工具
+- `/api/metrics`：给监控看运行状态
 
-- `PORT`：默认 `3000`
-- `REDIS_URL`：默认 `redis://localhost:6379`
-- `VECTOR_INDEX_NAME`：默认 `rag_idx`
-- `VECTOR_KEY_PREFIX`：默认 `doc:`
-- `EMBEDDING_PROVIDER`：`simple` / `openai`
-- `EMBEDDING_DIM`：`simple` 默认 `256`，`openai` 默认 `1536`
-- `OPENAI_API_KEY`：`openai` provider 必填
-- `OPENAI_EMBEDDING_MODEL`：默认 `text-embedding-3-small`
+它们都支持 API Key，但用途不同。
+
+### 为什么 `usageRate` 可能是 `0`？
+
+当 Redis 未设置 `maxmemory`（值为 `0`）时，内存占用率无法按上限计算，会显示为 `0`。
 
 ---
 
-## 9. 常见问题
+## Roadmap
 
-### Q1: 为什么内存占用率可能是 0%？
-Redis `maxmemory=0` 表示未设上限，`usageRate` 会显示 0。
+- [ ] 增加批量导入接口（减少逐条写入成本）
+- [ ] 增加文档更新接口（目前删除+新增）
+- [ ] 增加更细粒度的 API Key 权限模型
+- [ ] 增加检索评测样例与基准数据集
 
-### Q2: 首次启动看不到数据？
-系统会在空库时自动写入样例文档；若没有，请检查 Redis 连接和应用日志。
+---
 
-### Q3: API Key 能访问哪些接口？
-当前仅允许访问 `GET /api/metrics`，它是监控接口，不是标准 MCP 工具入口。
+如果这个项目对你有帮助，欢迎 Star 和提 Issue，一起把它打磨成更实用的 Redis RAG 基础设施。
