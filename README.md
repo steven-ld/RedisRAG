@@ -185,13 +185,14 @@ curl -sS -X POST "$MCP_URL" \
 - `limit` 默认 `6`，最大 `50`
 - `keyword` 内容模糊匹配
 - `source` 来源精确匹配
-- `tags` 逗号分隔，命中任一标签即可
+- `tags` 逗号分隔，默认命中任一标签即可
+- `tagMode=all` 时，检索会要求文档同时命中所有标签
 
 ### 检索
 
 - `POST /api/search`
 
-支持参数：`query`, `topK`, `page`, `limit`, `keyword`, `source`, `tags`。
+支持参数：`query`, `topK`, `page`, `limit`, `keyword`, `source`, `tags`, `tagMode`。
 
 ### 监控
 

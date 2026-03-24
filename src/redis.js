@@ -505,7 +505,8 @@ export async function searchDocuments({
   limit = 5,
   keyword = '',
   source = '',
-  tags = []
+  tags = [],
+  tagMode = 'any'
 }) {
   const embedding = await getEmbedding(query);
   const queryVector = toFloat32Buffer(embedding);
@@ -520,12 +521,17 @@ export async function searchDocuments({
   }
 
   if (Array.isArray(tags) && tags.length) {
-    const tagClause = tags
+    const normalizedTags = tags
       .filter(Boolean)
-      .map((tag) => escapeTagValue(tag))
-      .join('|');
-    if (tagClause) {
-      clauses.push(`@tags:{${tagClause}}`);
+      .map((tag) => escapeTagValue(tag));
+    if (normalizedTags.length) {
+      if (String(tagMode || 'any').trim().toLowerCase() === 'all') {
+        normalizedTags.forEach((tag) => {
+          clauses.push(`@tags:{${tag}}`);
+        });
+      } else {
+        clauses.push(`@tags:{${normalizedTags.join('|')}}`);
+      }
     }
   }
 

@@ -517,7 +517,8 @@ app.post('/api/search', asyncHandler(async (request, response) => {
     limit,
     keyword,
     source,
-    tags
+    tags,
+    tagMode
   } = request.body || {};
 
   if (!query || !String(query).trim()) {
@@ -531,7 +532,8 @@ app.post('/api/search', asyncHandler(async (request, response) => {
     limit: Number(limit || 5),
     keyword: keyword ? String(keyword).trim() : '',
     source: source ? String(source).trim() : '',
-    tags: Array.isArray(tags) ? tags.map((item) => String(item).trim()).filter(Boolean) : []
+    tags: Array.isArray(tags) ? tags.map((item) => String(item).trim()).filter(Boolean) : [],
+    tagMode: tagMode ? String(tagMode).trim().toLowerCase() : 'any'
   });
 
   return response.json(results);
