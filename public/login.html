@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Redis-RAG 控制台登录</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="auth-shell">
+      <section class="auth-card">
+        <p class="eyebrow">Redis-RAG Console</p>
+        <h1>登录</h1>
+        <p class="hero-copy">首次登录后将进入控制台并弹出强制改密窗口。</p>
+
+        <form id="login-form" class="stack">
+          <label>
+            账号
+            <input id="username" value="amdin" required />
+          </label>
+          <label>
+            密码
+            <input id="password" type="password" value="redisrag" required />
+          </label>
+          <button type="submit" class="primary">登录</button>
+        </form>
+
+        <p id="auth-message" class="empty"></p>
+      </section>
+    </div>
+    <script type="module" src="/login.js"></script>
+  </body>
+  </html>

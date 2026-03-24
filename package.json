@@ -1,0 +1,15 @@
+{
+  "name": "redis-rag-demo",
+  "version": "1.0.0",
+  "description": "JavaScript + Docker Redis vector search demo for small RAG",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/app.js",
+    "start": "node src/app.js",
+    "check": "node --check src/app.js && node --check src/redis.js && node --check src/embeddings.js && node --check public/app.js"
+  },
+  "dependencies": {
+    "@redis/client": "^5.8.2",
+    "express": "^4.21.2"
+  }
+}

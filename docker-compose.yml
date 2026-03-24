@@ -1,0 +1,28 @@
+services:
+  redis:
+    image: redis/redis-stack:latest
+    container_name: redis-rag-stack
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+    volumes:
+      - redis-rag-data:/data
+
+  app:
+    build:
+      context: .
+    container_name: redis-rag-app
+    depends_on:
+      - redis
+    environment:
+      PORT: "3000"
+      REDIS_URL: "redis://redis:6379"
+      VECTOR_INDEX_NAME: "rag_idx"
+      VECTOR_KEY_PREFIX: "doc:"
+      EMBEDDING_DIM: "256"
+      EMBEDDING_PROVIDER: "simple"
+    ports:
+      - "3000:3000"
+
+volumes:
+  redis-rag-data:

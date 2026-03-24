@@ -1,0 +1,1122 @@
+const APP_VERSION = '1.0.0';
+const authTokenKey = 'redis_rag_token';
+const SEARCH_PAGE_LIMIT = 5;
+const DEFAULT_DOCUMENT_LIMIT = 6;
+
+const state = {
+  requirePasswordChange: false,
+  currentView: 'monitor',
+  session: null,
+  health: null,
+  metrics: null,
+  documents: {
+    page: 1,
+    totalPages: 1,
+    limit: DEFAULT_DOCUMENT_LIMIT,
+    filters: {
+      keyword: '',
+      source: '',
+      tags: []
+    }
+  },
+  search: {
+    page: 1,
+    totalPages: 1,
+    payload: null
+  }
+};
+
+function first(...selectors) {
+  for (const selector of selectors.flat()) {
+    if (!selector) continue;
+    const element = document.querySelector(selector);
+    if (element) return element;
+  }
+  return null;
+}
+
+function all(...selectors) {
+  const elements = [];
+  for (const selector of selectors.flat()) {
+    if (!selector) continue;
+    elements.push(...document.querySelectorAll(selector));
+  }
+  return elements;
+}
+
+function on(element, eventName, handler, options) {
+  if (element) {
+    element.addEventListener(eventName, handler, options);
+  }
+}
+
+function setHidden(element, hidden) {
+  if (element) {
+    element.classList.toggle('hidden', hidden);
+  }
+}
+
+function setText(element, value) {
+  if (element) {
+    element.textContent = value == null ? '' : String(value);
+  }
+}
+
+function getToken() {
+  return localStorage.getItem(authTokenKey) || '';
+}
+
+function clearTokenAndRedirect() {
+  localStorage.removeItem(authTokenKey);
+  window.location.href = '/login.html';
+}
+
+if (!getToken()) {
+  clearTokenAndRedirect();
+}
+
+const root = document.documentElement;
+const body = document.body;
+const sidebarNav = first('#sidebar-nav', '[data-sidebar-nav]', '.sidebar-nav');
+const navControls = sidebarNav
+  ? Array.from(sidebarNav.querySelectorAll('[data-view], button, a'))
+  : all('[data-view]', '[data-nav-view]');
+
+const viewRoots = {
+  monitor: first('#page-monitor', '[data-page="monitor"]', '#monitor-page'),
+  documents: first('#page-documents', '[data-page="documents"]', '#documents-page'),
+  api: first('#page-api', '[data-page="api"]', '#api-page'),
+  about: first('#page-about', '[data-page="about"]', '#about-page')
+};
+
+const addForm = first('#add-form', '#document-create-form');
+const searchForm = first('#search-form');
+const documentsContainer = first('#documents', '#document-list');
+const resultsContainer = first('#results', '#search-results');
+const healthStatus = first('#health-status', '#monitor-health-status');
+const healthMeta = first('#health-meta', '#monitor-health-meta');
+const resultTemplate = first('#result-template');
+const documentTemplate = first('#document-template');
+const documentsCount = first('#documents-count', '#document-count');
+const pageInfoText = first('#page-info', '#document-page-info');
+const pageFirstButton = first('#page-first', '#document-page-first');
+const prevPageButton = first('#page-prev', '#document-page-prev');
+const nextPageButton = first('#page-next', '#document-page-next');
+const pageLastButton = first('#page-last', '#document-page-last');
+const pageLimitSelect = first('#page-limit', '#document-page-limit');
+const pageJumpInput = first('#page-jump', '#document-page-jump');
+const pageGoButton = first('#page-go', '#document-page-go');
+const refreshMetricsButton = first('#refresh-metrics');
+const metricMemoryUsed = first('#metric-memory-used');
+const metricMemoryPeak = first('#metric-memory-peak');
+const metricMemoryUsageRate = first('#metric-memory-usage-rate');
+const metricMemoryRss = first('#metric-memory-rss');
+const metricRedisHitRate = first('#metric-redis-hit-rate');
+const metricTotalCommands = first('#metric-total-commands');
+const metricSearchHitRate = first('#metric-search-hit-rate');
+const metricSearchAvg = first('#metric-search-avg');
+const metricSearchQueries = first('#metric-search-queries');
+const metricSearchResults = first('#metric-search-results');
+const mcpHitRate = first('#mcp-hit-rate');
+const mcpAvgResults = first('#mcp-avg-results');
+const mcpLastQuery = first('#mcp-last-query');
+const mcpHits = first('#mcp-hits');
+const mcpQueries = first('#mcp-queries');
+const mcpQpm = first('#mcp-qpm');
+const mcpQp5m = first('#mcp-qp5m');
+const mcpMissRate = first('#mcp-miss-rate');
+const apiKeyForm = first('#apikey-form', '#api-key-form');
+const apiKeyNameInput = first('#apikey-name', '#api-key-name');
+const apiKeyDaysInput = first('#apikey-days', '#api-key-days');
+const apiKeyGenerated = first('#apikey-generated', '#api-key-generated-result');
+const apiKeyList = first('#apikey-list', '#api-key-list');
+const searchCount = first('#search-count');
+const searchPageInfoText = first('#search-page-info');
+const searchPrevPageButton = first('#search-page-prev');
+const searchNextPageButton = first('#search-page-next');
+const logoutButton = first('#logout-btn', '#logout-button');
+const passwordModal = first('#password-modal');
+const forcePasswordForm = first('#force-password-form');
+const forceNewPasswordInput = first('#force-new-password');
+const forcePasswordMessage = first('#force-password-message');
+const documentFilterForm = first('#document-filter-form');
+const documentFilterResetButton = first('#document-filter-reset');
+const documentKeywordInput = first('#document-keyword');
+const documentSourceInput = first('#document-source');
+const documentTagsInput = first('#document-tags');
+const documentCreateButton = first('#document-create-btn', '#open-document-modal');
+const documentModal = first('#document-modal', '#document-create-modal');
+const documentModalCloseButton = first('#document-modal-close', '#document-create-close');
+const documentCreateCancelButton = first('#document-create-cancel');
+const documentCreateForm = first('#document-create-form', '#add-form');
+const documentCreateSourceInput = first('#document-create-source', '#source');
+const documentCreateTagsInput = first('#document-create-tags', '#tags');
+const documentCreateContentInput = first('#document-create-content', '#content');
+const aboutVersion = first('#about-version', '#about-version-value');
+const aboutStatusList = first('#about-status-list', '#about-system-status');
+const aboutHealthStatus = first('#about-health-status');
+const aboutEmbeddingProvider = first('#about-embedding-provider');
+const aboutIndexName = first('#about-index-name');
+const aboutLoginUser = first('#about-login-user');
+const aboutPasswordState = first('#about-password-state');
+const aboutRedisHitRate = first('#about-redis-hit-rate');
+const aboutTotalCommands = first('#about-total-commands');
+const aboutSearchHitRate = first('#about-search-hit-rate');
+const aboutMcpQpm = first('#about-mcp-qpm');
+const aboutLastQuery = first('#about-last-query');
+const aboutMemoryUsage = first('#about-memory-usage');
+const aboutMemoryRss = first('#about-memory-rss');
+const aboutVersionHint = first('#about-version-hint');
+
+let documentsPageLimit = Number(pageLimitSelect?.value || DEFAULT_DOCUMENT_LIMIT);
+let currentPage = 1;
+let totalPages = 1;
+let currentSearchPage = 1;
+let totalSearchPages = 1;
+let currentSearchPayload = null;
+
+function splitTags(input) {
+  return String(input || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+function formatBytes(value) {
+  if (!value) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let index = 0;
+  let number = Number(value);
+
+  while (number >= 1024 && index < units.length - 1) {
+    number /= 1024;
+    index += 1;
+  }
+
+  return `${number.toFixed(2)} ${units[index]}`;
+}
+
+function formatPercent(value) {
+  if (value == null || Number.isNaN(value)) return '-';
+  return `${(Number(value) * 100).toFixed(1)}%`;
+}
+
+function formatDateTime(value) {
+  if (!value) return '暂无查询';
+  return new Date(Number(value)).toLocaleString();
+}
+
+function maskApiKey(value) {
+  if (!value || value.length < 16) return value || '';
+  return `${value.slice(0, 12)}...${value.slice(-6)}`;
+}
+
+function showForcePasswordModal(message = '') {
+  setHidden(passwordModal, false);
+  if (message) {
+    setText(forcePasswordMessage, message);
+  }
+}
+
+function hideForcePasswordModal() {
+  setHidden(passwordModal, true);
+  setText(forcePasswordMessage, '');
+  forcePasswordForm?.reset();
+}
+
+function ensurePasswordChange(message = '请先完成首次改密。') {
+  if (state.requirePasswordChange) {
+    showForcePasswordModal(message);
+    return true;
+  }
+  return false;
+}
+
+function setNavActive(view) {
+  state.currentView = view;
+  root.dataset.activeView = view;
+  if (body) {
+    body.dataset.activeView = view;
+  }
+
+  for (const control of navControls) {
+    const target = control.dataset.view || control.dataset.page || control.getAttribute('href')?.replace(/^#/, '');
+    const active = target === view;
+    control.classList.toggle('active', active);
+    control.classList.toggle('is-active', active);
+    control.setAttribute('aria-current', active ? 'page' : 'false');
+  }
+
+  for (const [name, element] of Object.entries(viewRoots)) {
+    setHidden(element, Boolean(element) && name !== view);
+  }
+}
+
+function updateHealthSummary(health, errorMessage = '') {
+  setText(healthStatus, health ? '在线' : '异常');
+  if (!healthMeta) return;
+
+  if (health) {
+    setText(
+      healthMeta,
+      `Embedding: ${health.embeddingProvider || '-'} | Index: ${health.indexName || '-'}`
+    );
+  } else {
+    setText(healthMeta, errorMessage || '正在检测 Redis 与索引');
+  }
+}
+
+function renderAbout() {
+  const health = state.health || {};
+  const metrics = state.metrics || {};
+  const session = state.session || {};
+  const version = health.version || health.appVersion || APP_VERSION;
+
+  setText(aboutVersion, version);
+  setText(aboutVersionHint, health.version ? '来自 health 接口' : '来自前端常量');
+  setText(aboutHealthStatus, health.ok === false ? '异常' : (health.ok === true ? '在线' : '-'));
+  setText(aboutEmbeddingProvider, health.embeddingProvider || '-');
+  setText(aboutIndexName, health.indexName || '-');
+  setText(aboutLoginUser, session.username || '-');
+  setText(aboutPasswordState, state.requirePasswordChange ? '首次登录待改密' : '已完成改密');
+  setText(aboutRedisHitRate, formatPercent(metrics.stats?.redisHitRate));
+  setText(aboutTotalCommands, metrics.stats?.totalCommands?.toLocaleString?.() || '0');
+  setText(aboutSearchHitRate, formatPercent(metrics.search?.hitRate));
+  setText(aboutMcpQpm, String(metrics.mcp?.queriesLastMinute ?? '0'));
+  setText(aboutLastQuery, formatDateTime(metrics.search?.lastQueryAt));
+  setText(aboutMemoryUsage, metrics.memory?.usedHuman || formatBytes(metrics.memory?.used));
+  setText(aboutMemoryRss, formatBytes(metrics.memory?.rss));
+
+  if (!aboutStatusList) return;
+
+  const rows = [
+    ['版本', version],
+    ['健康状态', health.ok === false ? '异常' : '在线'],
+    ['Embedding', health.embeddingProvider || '-'],
+    ['索引', health.indexName || '-'],
+    ['当前用户', session.username || '-'],
+    ['改密状态', state.requirePasswordChange ? '首次登录待改密' : '已完成改密'],
+    ['Redis 命中率', formatPercent(metrics.stats?.redisHitRate)],
+    ['总命令数', metrics.stats?.totalCommands?.toLocaleString?.() || '0'],
+    ['搜索命中率', formatPercent(metrics.search?.hitRate)],
+    ['MCP 近 1 分钟查询', String(metrics.mcp?.queriesLastMinute ?? '0')]
+  ];
+
+  aboutStatusList.innerHTML = rows
+    .map(([label, value]) => `
+      <article class="metric-card about-card">
+        <p class="metric-label">${escapeHtml(label)}</p>
+        <strong>${escapeHtml(value)}</strong>
+      </article>
+    `)
+    .join('');
+}
+
+async function request(url, options = {}) {
+  const token = getToken();
+  if (!token) {
+    clearTokenAndRedirect();
+    throw new Error('Not authenticated');
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(options.headers || {})
+    }
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (response.status === 401 || response.status === 403) {
+    if (payload.error === 'PASSWORD_CHANGE_REQUIRED') {
+      state.requirePasswordChange = true;
+      showForcePasswordModal('首次登录请先修改密码。');
+      throw new Error('PASSWORD_CHANGE_REQUIRED');
+    }
+
+    clearTokenAndRedirect();
+    throw new Error(payload.error || 'Authentication required');
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.error || 'Request failed');
+  }
+
+  return payload;
+}
+
+function renderResults(items) {
+  if (!resultsContainer) return;
+  resultsContainer.innerHTML = '';
+
+  if (!items.length) {
+    resultsContainer.innerHTML = '<p class="empty">没有检索到结果，试试更换查询或放宽过滤条件。</p>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const item of items) {
+    const node = resultTemplate?.content?.firstElementChild
+      ? resultTemplate.content.firstElementChild.cloneNode(true)
+      : document.createElement('article');
+
+    if (!resultTemplate?.content?.firstElementChild) {
+      node.className = 'result-card';
+      node.innerHTML = `
+        <div class="result-top">
+          <strong class="result-id"></strong>
+          <span class="score-badge"></span>
+        </div>
+        <p class="result-content"></p>
+        <div class="meta-row">
+          <span class="result-source"></span>
+          <span class="result-tags"></span>
+        </div>
+      `;
+    }
+
+    node.querySelector('.result-id').textContent = item.id;
+    node.querySelector('.score-badge').textContent = `相似度 ${item.similarity ?? '-'}`;
+    node.querySelector('.result-content').textContent = item.content;
+    node.querySelector('.result-source').textContent = `来源: ${item.source || 'unknown'}`;
+    node.querySelector('.result-tags').textContent = `标签: ${(item.tags || []).join(', ') || '无'}`;
+    fragment.appendChild(node);
+  }
+
+  resultsContainer.appendChild(fragment);
+}
+
+function renderSearchPagination(pageInfo) {
+  if (!pageInfo) return;
+
+  currentSearchPage = pageInfo.page;
+  totalSearchPages = pageInfo.totalPages;
+  setText(searchPageInfoText, `${pageInfo.page} / ${pageInfo.totalPages}`);
+  if (searchPrevPageButton) searchPrevPageButton.disabled = pageInfo.page <= 1;
+  if (searchNextPageButton) searchNextPageButton.disabled = pageInfo.page >= pageInfo.totalPages;
+  setText(searchCount, `${pageInfo.total} 条结果`);
+}
+
+function renderDocuments(items) {
+  if (!documentsContainer) return;
+  documentsContainer.innerHTML = '';
+
+  if (!items.length) {
+    documentsContainer.innerHTML = '<p class="empty">当前还没有文档，点击右上角“新建”开始添加。</p>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const item of items) {
+    const node = documentTemplate?.content?.firstElementChild
+      ? documentTemplate.content.firstElementChild.cloneNode(true)
+      : document.createElement('article');
+
+    if (!documentTemplate?.content?.firstElementChild) {
+      node.className = 'doc-card';
+      node.innerHTML = `
+        <div class="result-top">
+          <strong class="doc-title"></strong>
+          <button class="ghost danger" type="button">删除</button>
+        </div>
+        <p class="doc-content"></p>
+        <div class="meta-row">
+          <span class="doc-source"></span>
+          <span class="doc-tags"></span>
+          <span class="doc-date"></span>
+        </div>
+      `;
+    }
+
+    node.querySelector('.doc-title').textContent = item.id;
+    node.querySelector('.doc-content').textContent = item.content;
+    node.querySelector('.doc-source').textContent = `来源: ${item.source || 'manual'}`;
+    node.querySelector('.doc-tags').textContent = `标签: ${(item.tags || []).join(', ') || '无'}`;
+    node.querySelector('.doc-date').textContent = new Date(item.createdAt).toLocaleString();
+
+    const deleteButton = node.querySelector('button');
+    on(deleteButton, 'click', async () => {
+      deleteButton.disabled = true;
+      try {
+        await request(`/api/documents/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+        await loadDocuments(state.documents.page);
+      } catch (error) {
+        alert(error.message);
+        deleteButton.disabled = false;
+      }
+    });
+
+    fragment.appendChild(node);
+  }
+
+  documentsContainer.appendChild(fragment);
+}
+
+function renderPagination(pageInfo) {
+  if (!pageInfo) return;
+
+  totalPages = pageInfo.totalPages;
+  currentPage = pageInfo.page;
+  setText(pageInfoText, `${pageInfo.page} / ${pageInfo.totalPages}`);
+
+  if (pageJumpInput) {
+    pageJumpInput.value = String(pageInfo.page);
+    pageJumpInput.max = String(pageInfo.totalPages);
+  }
+  if (pageFirstButton) pageFirstButton.disabled = pageInfo.page <= 1;
+  if (prevPageButton) prevPageButton.disabled = pageInfo.page <= 1;
+  if (nextPageButton) nextPageButton.disabled = pageInfo.page >= pageInfo.totalPages;
+  if (pageLastButton) pageLastButton.disabled = pageInfo.page >= pageInfo.totalPages;
+  if (pageGoButton) pageGoButton.disabled = pageInfo.totalPages <= 1;
+  setText(documentsCount, `${pageInfo.total} 条文档`);
+}
+
+function readDocumentFilters() {
+  return {
+    keyword: documentKeywordInput ? documentKeywordInput.value.trim() : '',
+    source: documentSourceInput ? documentSourceInput.value.trim() : '',
+    tags: splitTags(documentTagsInput ? documentTagsInput.value : '')
+  };
+}
+
+function syncDocumentLimit() {
+  const nextLimit = Number(pageLimitSelect?.value || DEFAULT_DOCUMENT_LIMIT);
+  documentsPageLimit = Number.isNaN(nextLimit) ? DEFAULT_DOCUMENT_LIMIT : nextLimit;
+  state.documents.limit = documentsPageLimit;
+}
+
+async function loadHealth() {
+  try {
+    const health = await request('/api/health');
+    state.health = health;
+    updateHealthSummary(health);
+    renderAbout();
+  } catch (error) {
+    state.health = null;
+    updateHealthSummary(null, error.message);
+    renderAbout();
+  }
+}
+
+async function loadDocuments(page = 1) {
+  if (state.requirePasswordChange) {
+    showForcePasswordModal('请先完成首次改密。');
+    return;
+  }
+
+  syncDocumentLimit();
+  const filters = readDocumentFilters();
+  state.documents.filters = filters;
+
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(documentsPageLimit)
+  });
+
+  if (filters.keyword) params.set('keyword', filters.keyword);
+  if (filters.source) params.set('source', filters.source);
+  if (filters.tags.length) params.set('tags', filters.tags.join(','));
+
+  try {
+    const payload = await request(`/api/documents?${params.toString()}`);
+    renderDocuments(payload.documents || []);
+    renderPagination(payload.pageInfo);
+    state.documents.page = payload.pageInfo?.page || page;
+    state.documents.totalPages = payload.pageInfo?.totalPages || 1;
+  } catch (error) {
+    if (error.message === 'PASSWORD_CHANGE_REQUIRED') return;
+    if (documentsContainer) {
+      documentsContainer.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;
+    }
+  }
+}
+
+async function loadMetrics() {
+  if (state.requirePasswordChange) {
+    showForcePasswordModal('请先完成首次改密。');
+    return;
+  }
+
+  if (refreshMetricsButton) {
+    refreshMetricsButton.disabled = true;
+  }
+
+  try {
+    const payload = await request('/api/metrics');
+    state.metrics = payload;
+    setText(metricMemoryUsed, `${formatBytes(payload.memory.used)} (${payload.memory.usedHuman})`);
+    setText(metricMemoryPeak, `峰值 ${formatBytes(payload.memory.peak)}`);
+    setText(metricMemoryUsageRate, formatPercent(payload.memory.usageRate));
+    setText(metricMemoryRss, `RSS ${formatBytes(payload.memory.rss)}`);
+    setText(metricRedisHitRate, formatPercent(payload.stats.redisHitRate));
+    setText(metricTotalCommands, payload.stats.totalCommands.toLocaleString());
+    setText(metricSearchHitRate, formatPercent(payload.search.hitRate));
+    setText(metricSearchAvg, payload.search.avgResults);
+    setText(metricSearchQueries, payload.search.queries);
+    setText(metricSearchResults, payload.search.results);
+    setText(mcpHitRate, formatPercent(payload.search.hitRate));
+    setText(mcpAvgResults, payload.search.avgResults);
+    setText(mcpLastQuery, formatDateTime(payload.search.lastQueryAt));
+    setText(mcpHits, payload.search.hits);
+    setText(mcpQueries, payload.search.queries);
+    setText(mcpQpm, payload.mcp.queriesLastMinute);
+    setText(mcpQp5m, payload.mcp.queriesLastFiveMinutes);
+    setText(mcpMissRate, formatPercent(payload.search.missRate));
+    renderAbout();
+  } catch (error) {
+    if (error.message !== 'PASSWORD_CHANGE_REQUIRED') {
+      setText(metricMemoryUsed, '加载失败');
+      setText(metricMemoryPeak, '加载失败');
+      setText(metricMemoryUsageRate, '-');
+      setText(metricMemoryRss, '-');
+      setText(metricRedisHitRate, '-');
+      setText(metricTotalCommands, '-');
+      setText(metricSearchHitRate, '-');
+      setText(metricSearchAvg, '-');
+      setText(metricSearchQueries, '-');
+      setText(metricSearchResults, '-');
+      setText(mcpHitRate, '-');
+      setText(mcpAvgResults, '-');
+      setText(mcpLastQuery, error.message);
+      setText(mcpHits, '-');
+      setText(mcpQueries, '-');
+      setText(mcpQpm, '-');
+      setText(mcpQp5m, '-');
+      setText(mcpMissRate, '-');
+    }
+  } finally {
+    if (refreshMetricsButton) {
+      refreshMetricsButton.disabled = false;
+    }
+  }
+}
+
+function renderApiKeyList(items) {
+  if (!apiKeyList) return;
+  apiKeyList.innerHTML = '';
+
+  if (!items.length) {
+    apiKeyList.innerHTML = '<p class="empty">暂无 API Key，可点击上方按钮生成。</p>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const item of items) {
+    const node = document.createElement('article');
+    node.className = 'doc-card';
+    node.innerHTML = `
+      <div class="result-top">
+        <strong>Key ID: ${escapeHtml(item.keyId)}</strong>
+        <button class="ghost danger" type="button">吊销</button>
+      </div>
+      <p class="doc-content">名称: ${escapeHtml(item.name || 'mcp-client')}</p>
+      <div class="meta-row">
+        <span>创建者: ${escapeHtml(item.createdBy || '-')}</span>
+        <span>创建时间: ${formatDateTime(item.createdAt)}</span>
+        <span>最近使用: ${formatDateTime(item.lastUsedAt)}</span>
+        <span>过期时间: ${formatDateTime(item.expiresAt)}</span>
+      </div>
+    `;
+
+    const revokeButton = node.querySelector('button');
+    on(revokeButton, 'click', async () => {
+      const raw = prompt(`请输入要吊销的完整 API Key（Key ID: ${item.keyId}）`);
+      if (!raw) return;
+
+      revokeButton.disabled = true;
+      try {
+        const payload = await request('/api/auth/api-keys', {
+          method: 'DELETE',
+          body: JSON.stringify({ key: raw.trim() })
+        });
+        if (!payload.revoked) {
+          alert('未匹配到该 API Key，请确认输入完整且正确。');
+        }
+        await loadApiKeys();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        revokeButton.disabled = false;
+      }
+    });
+
+    fragment.appendChild(node);
+  }
+
+  apiKeyList.appendChild(fragment);
+}
+
+async function loadApiKeys() {
+  if (state.requirePasswordChange) {
+    showForcePasswordModal('请先完成首次改密。');
+    return;
+  }
+
+  try {
+    const payload = await request('/api/auth/api-keys');
+    renderApiKeyList(payload.keys || []);
+  } catch (error) {
+    if (error.message === 'PASSWORD_CHANGE_REQUIRED') return;
+    if (apiKeyList) {
+      apiKeyList.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;
+    }
+  }
+}
+
+async function loadSession() {
+  const response = await request('/api/auth/session');
+  state.session = response;
+  state.requirePasswordChange = Boolean(response.requirePasswordChange);
+
+  if (state.requirePasswordChange) {
+    showForcePasswordModal('首次登录请先修改密码。');
+    renderAbout();
+    return true;
+  }
+
+  hideForcePasswordModal();
+  renderAbout();
+  return false;
+}
+
+async function runSearch(page = 1) {
+  if (!currentSearchPayload || state.requirePasswordChange) {
+    showForcePasswordModal('请先完成首次改密。');
+    return;
+  }
+
+  try {
+    const payload = await request('/api/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...currentSearchPayload,
+        page,
+        limit: SEARCH_PAGE_LIMIT
+      })
+    });
+
+    renderResults(payload.results || []);
+    renderSearchPagination(payload.pageInfo);
+    await loadMetrics();
+  } catch (error) {
+    if (error.message !== 'PASSWORD_CHANGE_REQUIRED' && resultsContainer) {
+      resultsContainer.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;
+    }
+  }
+}
+
+function openDocumentModal() {
+  if (!documentModal) return;
+  setHidden(documentModal, false);
+  documentCreateContentInput?.focus();
+}
+
+function closeDocumentModal() {
+  if (!documentModal) return;
+  setHidden(documentModal, true);
+  documentCreateForm?.reset();
+}
+
+async function submitCreateDocument(event) {
+  event.preventDefault();
+
+  if (state.requirePasswordChange) {
+    showForcePasswordModal('请先完成首次改密。');
+    return;
+  }
+
+  const submitButton = documentCreateForm?.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+
+  try {
+    const sourceValue = documentCreateSourceInput?.value?.trim() || document.querySelector('#source')?.value?.trim() || '';
+    const tagsValue = documentCreateTagsInput?.value ?? document.querySelector('#tags')?.value ?? '';
+    const contentValue = documentCreateContentInput?.value?.trim() || document.querySelector('#content')?.value?.trim() || '';
+
+    await request('/api/documents', {
+      method: 'POST',
+      body: JSON.stringify({
+        source: sourceValue,
+        tags: splitTags(tagsValue),
+        content: contentValue
+      })
+    });
+
+    closeDocumentModal();
+    await loadDocuments(state.documents.page || 1);
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+  }
+}
+
+async function activateView(view) {
+  const nextView = ['monitor', 'documents', 'api', 'about'].includes(view) ? view : 'monitor';
+
+  if (state.requirePasswordChange && nextView !== 'monitor') {
+    showForcePasswordModal('请先完成首次改密。');
+    return;
+  }
+
+  setNavActive(nextView);
+
+  if (nextView === 'monitor') {
+    await Promise.allSettled([loadHealth(), loadMetrics()]);
+    return;
+  }
+
+  if (nextView === 'documents') {
+    await loadDocuments(state.documents.page || 1);
+    return;
+  }
+
+  if (nextView === 'api') {
+    await loadApiKeys();
+    return;
+  }
+
+  if (nextView === 'about') {
+    if (!state.health) {
+      await loadHealth();
+    }
+    if (!state.metrics) {
+      await loadMetrics();
+    }
+    renderAbout();
+  }
+}
+
+function bindNavControls() {
+  for (const control of navControls) {
+    on(control, 'click', (event) => {
+      const target = control.dataset.view || control.dataset.page || control.getAttribute('href')?.replace(/^#/, '');
+      if (!target) return;
+      event.preventDefault();
+      activateView(target);
+    });
+  }
+}
+
+function bindDocumentModalControls() {
+  on(documentCreateButton, 'click', () => {
+    if (state.requirePasswordChange) {
+      showForcePasswordModal('请先完成首次改密。');
+      return;
+    }
+    openDocumentModal();
+  });
+
+  on(documentModalCloseButton, 'click', () => {
+    closeDocumentModal();
+  });
+
+  on(documentCreateCancelButton, 'click', () => {
+    closeDocumentModal();
+  });
+
+  on(documentModal, 'click', (event) => {
+    if (event.target === documentModal) {
+      closeDocumentModal();
+    }
+  });
+
+  on(document, 'keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeDocumentModal();
+    }
+  });
+}
+
+function bindDocumentFilters() {
+  on(documentFilterForm, 'submit', async (event) => {
+    event.preventDefault();
+    await loadDocuments(1);
+  });
+
+  on(documentFilterResetButton, 'click', async () => {
+    if (documentKeywordInput) {
+      documentKeywordInput.value = '';
+    }
+    if (documentSourceInput) {
+      documentSourceInput.value = '';
+    }
+    if (documentTagsInput) {
+      documentTagsInput.value = '';
+    }
+    await loadDocuments(1);
+  });
+
+  on(pageLimitSelect, 'change', async () => {
+    syncDocumentLimit();
+    await loadDocuments(1);
+  });
+
+  on(pageGoButton, 'click', () => {
+    const page = Number(pageJumpInput?.value || 1);
+    const target = Number.isNaN(page) ? 1 : Math.min(Math.max(1, page), totalPages);
+    loadDocuments(target);
+  });
+
+  on(pageFirstButton, 'click', () => {
+    if (currentPage > 1) {
+      loadDocuments(1);
+    }
+  });
+
+  on(prevPageButton, 'click', () => {
+    if (currentPage > 1) {
+      loadDocuments(currentPage - 1);
+    }
+  });
+
+  on(nextPageButton, 'click', () => {
+    if (currentPage < totalPages) {
+      loadDocuments(currentPage + 1);
+    }
+  });
+
+  on(pageLastButton, 'click', () => {
+    if (currentPage < totalPages) {
+      loadDocuments(totalPages);
+    }
+  });
+}
+
+function bindSearchForm() {
+  on(searchForm, 'submit', async (event) => {
+    event.preventDefault();
+
+    if (state.requirePasswordChange) {
+      showForcePasswordModal('请先完成首次改密。');
+      return;
+    }
+
+    const submitButton = searchForm.querySelector('button[type="submit"]');
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
+    if (resultsContainer) {
+      resultsContainer.innerHTML = '<p class="empty">正在检索，请稍候...</p>';
+    }
+
+    try {
+      currentSearchPayload = {
+        query: document.querySelector('#query')?.value || '',
+        topK: Number(document.querySelector('#topK')?.value || 5),
+        keyword: '',
+        source: document.querySelector('#search-source')?.value || '',
+        tags: splitTags(document.querySelector('#search-tags')?.value || '')
+      };
+      await runSearch(1);
+    } catch (error) {
+      if (resultsContainer) {
+        resultsContainer.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;
+      }
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+      }
+    }
+  });
+
+  on(searchPrevPageButton, 'click', () => {
+    if (currentSearchPage > 1) {
+      runSearch(currentSearchPage - 1);
+    }
+  });
+
+  on(searchNextPageButton, 'click', () => {
+    if (currentSearchPage < totalSearchPages) {
+      runSearch(currentSearchPage + 1);
+    }
+  });
+}
+
+function bindApiKeyForm() {
+  on(apiKeyForm, 'submit', async (event) => {
+    if (state.requirePasswordChange) {
+      showForcePasswordModal('请先完成首次改密。');
+      return;
+    }
+
+    event.preventDefault();
+    const submitButton = apiKeyForm.querySelector('button[type="submit"]');
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
+    setText(apiKeyGenerated, '正在生成 API Key...');
+
+    try {
+      const payload = await request('/api/auth/api-keys', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: apiKeyNameInput?.value || 'mcp-client',
+          expiresInDays: Number(apiKeyDaysInput?.value || 3650)
+        })
+      });
+      const key = payload.key || '';
+      if (apiKeyGenerated) {
+        apiKeyGenerated.innerHTML = `新 Key（仅展示一次）: <code>${escapeHtml(maskApiKey(key))}</code><br/>完整值: <code>${escapeHtml(key)}</code>`;
+      }
+      await loadApiKeys();
+    } catch (error) {
+      setText(apiKeyGenerated, error.message);
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+      }
+    }
+  });
+}
+
+function bindGlobalActions() {
+  on(refreshMetricsButton, 'click', () => {
+    if (state.requirePasswordChange) {
+      showForcePasswordModal('请先完成首次改密。');
+      return;
+    }
+    loadMetrics();
+  });
+
+  on(logoutButton, 'click', () => {
+    clearTokenAndRedirect();
+  });
+
+  on(forcePasswordForm, 'submit', async (event) => {
+    event.preventDefault();
+    const submitButton = forcePasswordForm.querySelector('button[type="submit"]');
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
+    setText(forcePasswordMessage, '正在修改密码...');
+
+    try {
+      const payload = await request('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          newPassword: forceNewPasswordInput?.value || ''
+        })
+      });
+      if (!payload?.token) {
+        throw new Error('修改失败：未返回新会话 token');
+      }
+
+      localStorage.setItem(authTokenKey, payload.token);
+      state.requirePasswordChange = false;
+      setText(forcePasswordMessage, '密码修改成功，正在进入控制台...');
+      hideForcePasswordModal();
+
+      if (isSidebarLayout()) {
+        await activateView('monitor');
+      } else {
+        await Promise.allSettled([loadHealth(), loadDocuments(1), loadMetrics(), loadApiKeys()]);
+      }
+    } catch (error) {
+      setText(forcePasswordMessage, `修改失败：${error.message}`);
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+      }
+    }
+  });
+}
+
+function bindCreateDocumentForm() {
+  on(documentCreateForm, 'submit', submitCreateDocument);
+}
+
+function bindLegacyAddForm() {
+  if (!addForm || addForm === documentCreateForm) return;
+
+  on(addForm, 'submit', async (event) => {
+    event.preventDefault();
+
+    if (state.requirePasswordChange) {
+      showForcePasswordModal('请先完成首次改密。');
+      return;
+    }
+
+    const submitButton = addForm.querySelector('button[type="submit"]');
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
+
+    try {
+      await request('/api/documents', {
+        method: 'POST',
+        body: JSON.stringify({
+          source: first('#source')?.value || '',
+          tags: splitTags(first('#tags')?.value || ''),
+          content: first('#content')?.value || ''
+        })
+      });
+
+      addForm.reset();
+      await loadDocuments(1);
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+      }
+    }
+  });
+}
+
+function bootstrapDefaultSearchState() {
+  renderSearchPagination({ page: 1, totalPages: 1, total: 0 });
+}
+
+function isSidebarLayout() {
+  return Boolean(sidebarNav || navControls.length || Object.values(viewRoots).some(Boolean));
+}
+
+bindNavControls();
+bindDocumentModalControls();
+bindDocumentFilters();
+bindSearchForm();
+bindApiKeyForm();
+bindGlobalActions();
+bindCreateDocumentForm();
+bindLegacyAddForm();
+bootstrapDefaultSearchState();
+
+const forced = await loadSession();
+
+if (forced) {
+  await loadHealth();
+} else if (isSidebarLayout()) {
+  await activateView('monitor');
+} else {
+  await Promise.allSettled([
+    loadHealth(),
+    loadDocuments(1),
+    loadMetrics(),
+    loadApiKeys()
+  ]);
+}
+
+if (documentModal) {
+  setHidden(documentModal, true);
+}
+
+if (!isSidebarLayout()) {
+  renderAbout();
+}

@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Redis-RAG 控制台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="password-modal" class="modal-shell hidden">
+      <div class="modal-card">
+        <p class="eyebrow">安全设置</p>
+        <h2>首次登录请修改密码</h2>
+        <p class="hero-copy">修改后立即生效，本次会话无需重新登录。</p>
+        <form id="force-password-form" class="stack">
+          <label>
+            新密码
+            <input id="force-new-password" type="password" minlength="6" required />
+          </label>
+          <button type="submit" class="primary">确认修改</button>
+        </form>
+        <p id="force-password-message" class="empty"></p>
+      </div>
+    </div>
+
+    <div id="document-modal" class="modal-shell hidden">
+      <div class="modal-card modal-card-wide">
+        <div class="modal-head-row">
+          <div>
+            <p class="eyebrow">文档管理</p>
+            <h2>新建文档</h2>
+          </div>
+          <button id="document-modal-close" class="ghost modal-close" type="button">关闭</button>
+        </div>
+        <p class="hero-copy">填写后会自动生成向量并写入 Redis。</p>
+        <form id="add-form" class="stack">
+          <div class="grid-2">
+            <label>
+              来源
+              <input id="source" name="source" placeholder="例如 redis-docs" />
+            </label>
+            <label>
+              标签
+              <input id="tags" name="tags" placeholder="例如 redis,rag,vector" />
+            </label>
+          </div>
+          <label>
+            文档内容
+            <textarea
+              id="content"
+              name="content"
+              rows="9"
+              placeholder="输入要写入向量库的文档内容"
+              required
+            ></textarea>
+          </label>
+          <div class="form-actions">
+            <button class="ghost" type="button" id="document-create-cancel">取消</button>
+            <button type="submit" class="primary">保存文档</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="page-shell">
+      <aside class="sidebar panel">
+        <div class="brand-block">
+          <p class="eyebrow">Redis Vector Search</p>
+          <h1>Redis-RAG 控制台</h1>
+          <p class="hero-copy">
+            左侧目录快速切换监控、文档、API 和系统信息，右侧承载实际操作区。
+          </p>
+        </div>
+
+        <nav id="sidebar-nav" class="sidebar-nav" aria-label="页面目录">
+          <button class="nav-item active" type="button" data-view="monitor">数据监控</button>
+          <button class="nav-item" type="button" data-view="documents">文档管理</button>
+          <button class="nav-item" type="button" data-view="api">API 管理</button>
+          <button class="nav-item" type="button" data-view="about">关于</button>
+        </nav>
+
+        <div class="sidebar-footer hero-card" id="health-card">
+          <span class="hero-card-label">服务状态</span>
+          <strong id="health-status">加载中</strong>
+          <span id="health-meta">正在检测 Redis 与索引</span>
+          <button id="logout-btn" class="ghost" type="button">退出登录</button>
+        </div>
+      </aside>
+
+      <main class="content-area">
+        <section id="page-monitor" data-page="monitor" class="panel content-section hero-section">
+          <div class="section-head section-head-split">
+            <div>
+              <p class="eyebrow">首页概览</p>
+              <h2>数据监控</h2>
+              <p>展示机器状态、MCP 调用次数、命中率与检索健康度，便于快速判断系统是否正常。</p>
+            </div>
+            <button id="refresh-metrics" class="ghost" type="button">刷新 MCP 数据</button>
+          </div>
+
+          <div class="metrics-shell">
+            <div class="metrics-grid">
+              <article class="metric-card">
+                <p class="metric-label">Redis 内存</p>
+                <strong id="metric-memory-used">-</strong>
+                <span id="metric-memory-peak">Peak -</span>
+              </article>
+              <article class="metric-card">
+                <p class="metric-label">内存占用率</p>
+                <strong id="metric-memory-usage-rate">-</strong>
+                <span id="metric-memory-rss">RSS -</span>
+              </article>
+              <article class="metric-card">
+                <p class="metric-label">Redis 命中率</p>
+                <strong id="metric-redis-hit-rate">-</strong>
+                <span>总命令 <span id="metric-total-commands">0</span></span>
+              </article>
+              <article class="metric-card">
+                <p class="metric-label">搜索命中率</p>
+                <strong id="metric-search-hit-rate">-</strong>
+                <span>平均结果 <span id="metric-search-avg">0</span></span>
+              </article>
+              <article class="metric-card">
+                <p class="metric-label">查询总计</p>
+                <strong id="metric-search-queries">0</strong>
+                <span>结果总数 <span id="metric-search-results">0</span></span>
+              </article>
+              <article class="metric-card">
+                <p class="metric-label">MCP 调用次数</p>
+                <strong id="mcp-queries">0</strong>
+                <span>命中次数 <span id="mcp-hits">0</span></span>
+              </article>
+            </div>
+          </div>
+
+          <div class="mcp-panel">
+            <div class="panel-head">
+              <h3>MCP 监控面板</h3>
+              <p>展示命中率、查询频次和最后一次检索时间，方便随时掌握检索健康状态。</p>
+            </div>
+            <div class="mcp-grid">
+              <div>
+                <p class="metric-label">搜索命中（含缓存）</p>
+                <strong id="mcp-hit-rate">-</strong>
+              </div>
+              <div>
+                <p class="metric-label">平均每次结果</p>
+                <strong id="mcp-avg-results">-</strong>
+              </div>
+              <div>
+                <p class="metric-label">最后查询</p>
+                <strong id="mcp-last-query">-</strong>
+              </div>
+              <div>
+                <p class="metric-label">命中次数</p>
+                <strong>0</strong>
+                <span>总 queries 见上方指标卡</span>
+              </div>
+              <div>
+                <p class="metric-label">近 1 分钟查询</p>
+                <strong id="mcp-qpm">0</strong>
+              </div>
+              <div>
+                <p class="metric-label">近 5 分钟查询</p>
+                <strong id="mcp-qp5m">0</strong>
+              </div>
+              <div>
+                <p class="metric-label">无结果率</p>
+                <strong id="mcp-miss-rate">-</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-documents" data-page="documents" class="panel content-section docs-panel hidden">
+          <div class="section-head section-head-split">
+            <div>
+              <p class="eyebrow">文档中心</p>
+              <h2>文档管理</h2>
+              <p>检索知识库、筛选来源和标签，并通过分页控件浏览结果。</p>
+            </div>
+            <button id="document-create-btn" class="primary button-link" type="button">新建文档</button>
+          </div>
+
+          <div class="document-query-panel">
+            <div class="workspace-head">
+              <h3>语义检索（问答）</h3>
+              <p>输入问题后按语义检索文档，可附加来源/标签范围，结果按相似度排序。</p>
+            </div>
+            <form id="search-form" class="stack">
+              <label>
+                问题描述
+                <textarea
+                  id="query"
+                  name="query"
+                  rows="4"
+                  placeholder="例如 Redis 如何支持向量检索？"
+                  required
+                ></textarea>
+              </label>
+
+              <div class="grid-3">
+                <label>
+                  Top K
+                  <input id="topK" name="topK" type="number" min="1" max="20" value="5" />
+                </label>
+                <label>
+                  来源范围（可选）
+                  <input id="search-source" name="search-source" placeholder="例如 redis-docs" />
+                </label>
+                <label>
+                  标签范围（可选）
+                  <input id="search-tags" name="search-tags" placeholder="例如 redis,rag" />
+                </label>
+              </div>
+
+              <button type="submit" class="primary">开始语义检索</button>
+            </form>
+
+            <div class="panel-meta results-meta">
+              <span id="search-count">0 条检索结果</span>
+              <div class="pagination-controls">
+                <button id="search-page-prev" class="ghost" type="button">上一页</button>
+                <span id="search-page-info">1 / 1</span>
+                <button id="search-page-next" class="ghost" type="button">下一页</button>
+              </div>
+            </div>
+
+            <div class="results" id="results"></div>
+          </div>
+
+          <div class="document-list-panel">
+            <div class="workspace-head">
+              <h3>文档库筛选（列表）</h3>
+              <p>按关键字、来源和标签筛选已有文档，适合做内容盘点与维护。</p>
+            </div>
+            <form id="document-filter-form" class="stack compact-stack">
+              <div class="grid-3">
+                <label>
+                  关键字索引
+                  <input id="document-keyword" placeholder="按文档内容筛选" />
+                </label>
+                <label>
+                  来源
+                  <input id="document-source" placeholder="例如 redis-docs" />
+                </label>
+                <label>
+                  标签
+                  <input id="document-tags" placeholder="例如 redis,rag" />
+                </label>
+              </div>
+              <div class="filter-actions">
+                <button type="submit" class="ghost">筛选文档</button>
+                <button type="button" class="ghost" id="document-filter-reset">重置筛选</button>
+              </div>
+            </form>
+
+            <div class="panel-meta">
+              <span id="documents-count">0 条文档</span>
+              <div class="pagination-controls">
+                <label class="inline-control">
+                  每页
+                  <select id="page-limit">
+                    <option value="3">3</option>
+                    <option value="6" selected>6</option>
+                    <option value="12">12</option>
+                  </select>
+                </label>
+                <button id="page-first" class="ghost" type="button">首页</button>
+                <button id="page-prev" class="ghost" type="button">上一页</button>
+                <span id="page-info">1 / 1</span>
+                <button id="page-next" class="ghost" type="button">下一页</button>
+                <button id="page-last" class="ghost" type="button">末页</button>
+                <label class="inline-control">
+                  跳转
+                  <input id="page-jump" type="number" min="1" value="1" />
+                </label>
+                <button id="page-go" class="ghost" type="button">Go</button>
+              </div>
+            </div>
+            <div id="documents" class="documents"></div>
+          </div>
+        </section>
+
+        <section id="page-api" data-page="api" class="panel content-section api-panel hidden">
+          <div class="section-head">
+            <p class="eyebrow">访问控制</p>
+            <h2>API 管理</h2>
+            <p>维护长期 API Key，供 MCP 和自动化调用使用。</p>
+          </div>
+
+          <div class="api-layout">
+            <div class="api-card">
+              <div class="panel-head">
+                <h3>创建 Key</h3>
+                <p>生成长期 API Key（默认 3650 天）供 MCP 调用 `/api/metrics`，避免 token 频繁过期。</p>
+              </div>
+              <form id="apikey-form" class="stack">
+                <div class="grid-2">
+                  <label>
+                    Key 名称
+                    <input id="apikey-name" placeholder="例如 mcp-prod-monitor" />
+                  </label>
+                  <label>
+                    有效天数
+                    <input id="apikey-days" type="number" min="1" value="3650" />
+                  </label>
+                </div>
+                <button type="submit" class="primary">生成 API Key</button>
+              </form>
+              <div id="apikey-generated" class="empty">暂未生成新的 API Key。</div>
+            </div>
+
+            <div class="api-card">
+              <div class="panel-head">
+                <h3>Key 列表</h3>
+                <p>展示当前可用的 API Key，并支持按需吊销。</p>
+              </div>
+              <div id="apikey-list" class="documents"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-about" data-page="about" class="panel content-section about-panel hidden">
+          <div class="section-head">
+            <p class="eyebrow">系统信息</p>
+            <h2>关于</h2>
+            <p>展示系统版本与运行信息占位，后续可接入真实环境变量或实例状态。</p>
+          </div>
+
+          <div class="about-grid">
+            <article class="about-card">
+              <p class="metric-label">系统版本</p>
+              <strong id="about-version">v1.0.0</strong>
+              <span id="about-version-hint">来自前端常量</span>
+            </article>
+            <article class="about-card">
+              <p class="metric-label">运行环境</p>
+              <strong>生产 / 占位</strong>
+              <span>待接入服务发现与实例元信息</span>
+            </article>
+            <article class="about-card">
+              <p class="metric-label">部署状态</p>
+              <strong id="about-health-status">在线 / 占位</strong>
+              <span id="about-index-name">运行信息可由后端心跳接口填充</span>
+            </article>
+            <article class="about-card">
+              <p class="metric-label">维护说明</p>
+              <strong id="about-embedding-provider">可扩展</strong>
+              <span id="about-login-user">当前页面仅做前端结构与样式分区</span>
+            </article>
+          </div>
+          <div id="about-status-list" class="about-status-grid"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="result-template">
+      <article class="result-card">
+        <div class="result-top">
+          <strong class="result-id"></strong>
+          <span class="score-badge"></span>
+        </div>
+        <p class="result-content"></p>
+        <div class="meta-row">
+          <span class="result-source"></span>
+          <span class="result-tags"></span>
+        </div>
+      </article>
+    </template>
+
+    <template id="document-template">
+      <article class="doc-card">
+        <div class="result-top">
+          <strong class="doc-title"></strong>
+          <button class="ghost danger" type="button">删除</button>
+        </div>
+        <p class="doc-content"></p>
+        <div class="meta-row">
+          <span class="doc-source"></span>
+          <span class="doc-tags"></span>
+          <span class="doc-date"></span>
+        </div>
+      </article>
+    </template>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
