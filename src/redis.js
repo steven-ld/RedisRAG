@@ -457,6 +457,7 @@ export async function listDocuments() {
         id: hash.id,
         key,
         content: hash.content,
+        title: hash.title || extractTitleFromContent(hash.content),
         source: hash.source,
         tags: hash.tags ? hash.tags.split(',').filter(Boolean) : [],
         createdAt: Number(hash.createdAt || 0)
