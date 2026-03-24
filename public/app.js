@@ -113,9 +113,11 @@ const pageGoButton = first('#page-go', '#document-page-go');
 const refreshMetricsButton = first('#refresh-metrics');
 const metricMemoryUsed = first('#metric-memory-used');
 const metricMemoryPeak = first('#metric-memory-peak');
+const metricMemoryBar = first('#metric-memory-bar');
 const metricMemoryUsageRate = first('#metric-memory-usage-rate');
 const metricMemoryRss = first('#metric-memory-rss');
 const metricRedisHitRate = first('#metric-redis-hit-rate');
+const metricRedisBar = first('#metric-redis-bar');
 const metricTotalCommands = first('#metric-total-commands');
 const metricSearchHitRate = first('#metric-search-hit-rate');
 const metricSearchAvg = first('#metric-search-avg');
@@ -764,10 +766,10 @@ async function loadMetrics() {
   try {
     const payload = await request('/api/metrics');
     state.metrics = payload;
-    setText(metricMemoryUsed, `${formatBytes(payload.memory.used)} (${payload.memory.usedHuman})`);
+    setText(metricMemoryUsed, formatBytes(payload.memory.used));
     setText(metricMemoryPeak, `峰值 ${formatBytes(payload.memory.peak)}`);
     setText(metricMemoryUsageRate, formatPercent(payload.memory.usageRate));
-    setText(metricMemoryRss, `RSS ${formatBytes(payload.memory.rss)}`);
+    setText(metricMemoryRss, formatBytes(payload.memory.rss));
     setText(metricRedisHitRate, formatPercent(payload.stats.redisHitRate));
     setText(metricTotalCommands, payload.stats.totalCommands.toLocaleString());
     setText(metricSearchHitRate, formatPercent(payload.search.hitRate));
@@ -782,6 +784,15 @@ async function loadMetrics() {
     setText(mcpQpm, payload.mcp.queriesLastMinute);
     setText(mcpQp5m, payload.mcp.queriesLastFiveMinutes);
     setText(mcpMissRate, formatPercent(payload.search.missRate));
+
+    // Update progress bars
+    if (metricMemoryBar) {
+      metricMemoryBar.style.width = `${Math.min(100, payload.memory.usageRate || 0)}%`;
+    }
+    if (metricRedisBar) {
+      metricRedisBar.style.width = `${payload.stats.redisHitRate || 0}%`;
+    }
+
     renderAbout();
   } catch (error) {
     if (error.message !== 'PASSWORD_CHANGE_REQUIRED') {

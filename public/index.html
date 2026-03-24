@@ -134,84 +134,145 @@
 
       <main class="content-area">
         <section id="page-monitor" data-page="monitor" class="panel content-section hero-section">
-          <div class="section-head section-head-split">
-            <div>
-              <p class="eyebrow">首页概览</p>
+          <div class="monitor-header">
+            <div class="monitor-title-group">
+              <p class="eyebrow">Redis Vector Search</p>
               <h2>数据监控</h2>
-              <p>展示机器状态、MCP 调用次数、命中率与检索健康度，便于快速判断系统是否正常。</p>
+              <p class="monitor-subtitle">实时监控系统状态与检索健康度</p>
             </div>
-            <button id="refresh-metrics" class="ghost" type="button">刷新 MCP 数据</button>
+            <button id="refresh-metrics" class="primary refresh-btn" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+              刷新数据
+            </button>
           </div>
 
-          <div class="metrics-shell">
-            <div class="metrics-grid">
-              <article class="metric-card">
-                <p class="metric-label">Redis 内存</p>
-                <strong id="metric-memory-used">-</strong>
-                <span id="metric-memory-peak">Peak -</span>
-              </article>
-              <article class="metric-card">
-                <p class="metric-label">内存占用率</p>
-                <strong id="metric-memory-usage-rate">-</strong>
-                <span id="metric-memory-rss">RSS -</span>
-              </article>
-              <article class="metric-card">
-                <p class="metric-label">Redis 命中率</p>
-                <strong id="metric-redis-hit-rate">-</strong>
-                <span>总命令 <span id="metric-total-commands">0</span></span>
-              </article>
-              <article class="metric-card">
-                <p class="metric-label">搜索命中率</p>
-                <strong id="metric-search-hit-rate">-</strong>
-                <span>平均结果 <span id="metric-search-avg">0</span></span>
-              </article>
-              <article class="metric-card">
-                <p class="metric-label">查询总计</p>
-                <strong id="metric-search-queries">0</strong>
-                <span>结果总数 <span id="metric-search-results">0</span></span>
-              </article>
-              <article class="metric-card">
-                <p class="metric-label">MCP 调用次数</p>
-                <strong id="mcp-queries">0</strong>
-                <span>命中次数 <span id="mcp-hits">0</span></span>
-              </article>
+          <div class="metrics-primary">
+            <div class="metric-hero">
+              <div class="metric-hero-bg"></div>
+              <div class="metric-hero-content">
+                <span class="metric-hero-label">Redis 内存占用</span>
+                <strong class="metric-hero-value" id="metric-memory-used">-</strong>
+                <div class="metric-hero-bar">
+                  <div class="metric-hero-bar-fill" id="metric-memory-bar" style="width: 0%"></div>
+                </div>
+                <span class="metric-hero-sub" id="metric-memory-peak">Peak —</span>
+              </div>
+              <div class="metric-hero-glow"></div>
+            </div>
+
+            <div class="metric-hero">
+              <div class="metric-hero-bg"></div>
+              <div class="metric-hero-content">
+                <span class="metric-hero-label">Redis 命中率</span>
+                <strong class="metric-hero-value" id="metric-redis-hit-rate">-</strong>
+                <div class="metric-hero-bar hit-rate-bar">
+                  <div class="metric-hero-bar-fill hit" id="metric-redis-bar" style="width: 0%"></div>
+                </div>
+                <span class="metric-hero-sub">总命令 <span id="metric-total-commands">0</span></span>
+              </div>
+              <div class="metric-hero-glow"></div>
+            </div>
+          </div>
+
+          <div class="metrics-secondary">
+            <div class="metric-stat-card">
+              <div class="metric-stat-icon redis-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+              </div>
+              <div class="metric-stat-body">
+                <span class="metric-stat-label">内存占用率</span>
+                <strong class="metric-stat-value" id="metric-memory-usage-rate">-</strong>
+                <span class="metric-stat-sub">RSS <span id="metric-memory-rss">-</span></span>
+              </div>
+            </div>
+
+            <div class="metric-stat-card">
+              <div class="metric-stat-icon search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="M21 21l-4.35-4.35"/>
+                </svg>
+              </div>
+              <div class="metric-stat-body">
+                <span class="metric-stat-label">搜索命中率</span>
+                <strong class="metric-stat-value" id="metric-search-hit-rate">-</strong>
+                <span class="metric-stat-sub">平均 <span id="metric-search-avg">0</span> 条/次</span>
+              </div>
+            </div>
+
+            <div class="metric-stat-card">
+              <div class="metric-stat-icon query-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                  <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                </svg>
+              </div>
+              <div class="metric-stat-body">
+                <span class="metric-stat-label">查询总计</span>
+                <strong class="metric-stat-value" id="metric-search-queries">0</strong>
+                <span class="metric-stat-sub">结果 <span id="metric-search-results">0</span> 条</span>
+              </div>
+            </div>
+
+            <div class="metric-stat-card">
+              <div class="metric-stat-icon mcp-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                  <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+              </div>
+              <div class="metric-stat-body">
+                <span class="metric-stat-label">MCP 调用</span>
+                <strong class="metric-stat-value" id="mcp-queries">0</strong>
+                <span class="metric-stat-sub">命中 <span id="mcp-hits">0</span> 次</span>
+              </div>
             </div>
           </div>
 
           <div class="mcp-panel">
-            <div class="panel-head">
-              <h3>MCP 监控面板</h3>
-              <p>展示命中率、查询频次和最后一次检索时间，方便随时掌握检索健康状态。</p>
+            <div class="mcp-panel-header">
+              <h3>MCP 检索分析</h3>
+              <div class="mcp-live-indicator">
+                <span class="live-dot"></span>
+                <span>实时</span>
+              </div>
             </div>
             <div class="mcp-grid">
-              <div>
-                <p class="metric-label">搜索命中（含缓存）</p>
-                <strong id="mcp-hit-rate">-</strong>
+              <div class="mcp-stat">
+                <span class="mcp-stat-label">搜索命中率</span>
+                <strong class="mcp-stat-value" id="mcp-hit-rate">-</strong>
+                <div class="mcp-stat-bar">
+                  <div class="mcp-stat-bar-fill" id="mcp-hit-bar" style="width: 0%"></div>
+                </div>
               </div>
-              <div>
-                <p class="metric-label">平均每次结果</p>
-                <strong id="mcp-avg-results">-</strong>
+              <div class="mcp-stat">
+                <span class="mcp-stat-label">平均每次结果</span>
+                <strong class="mcp-stat-value" id="mcp-avg-results">-</strong>
               </div>
-              <div>
-                <p class="metric-label">最后查询</p>
-                <strong id="mcp-last-query">-</strong>
+              <div class="mcp-stat">
+                <span class="mcp-stat-label">最后查询</span>
+                <strong class="mcp-stat-value" id="mcp-last-query">-</strong>
               </div>
-              <div>
-                <p class="metric-label">命中次数</p>
-                <strong>0</strong>
-                <span>总 queries 见上方指标卡</span>
+              <div class="mcp-stat highlight">
+                <span class="mcp-stat-label">近 1 分钟</span>
+                <strong class="mcp-stat-value" id="mcp-qpm">0</strong>
+                <span class="mcp-stat-unit">次</span>
               </div>
-              <div>
-                <p class="metric-label">近 1 分钟查询</p>
-                <strong id="mcp-qpm">0</strong>
+              <div class="mcp-stat">
+                <span class="mcp-stat-label">近 5 分钟</span>
+                <strong class="mcp-stat-value" id="mcp-qp5m">0</strong>
+                <span class="mcp-stat-unit">次</span>
               </div>
-              <div>
-                <p class="metric-label">近 5 分钟查询</p>
-                <strong id="mcp-qp5m">0</strong>
-              </div>
-              <div>
-                <p class="metric-label">无结果率</p>
-                <strong id="mcp-miss-rate">-</strong>
+              <div class="mcp-stat">
+                <span class="mcp-stat-label">无结果率</span>
+                <strong class="mcp-stat-value" id="mcp-miss-rate">-</strong>
               </div>
             </div>
           </div>
