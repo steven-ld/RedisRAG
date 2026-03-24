@@ -1378,7 +1378,7 @@ button:disabled {
 }
 
 .prose {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   line-height: 1.85;
   color: #2b241c;
 }
@@ -1394,9 +1394,16 @@ button:disabled {
 .prose h5,
 .prose h6 {
   scroll-margin-top: 24px;
-  margin: 1.8em 0 0.7em;
+  margin: 1.6em 0 0.6em;
   line-height: 1.2;
 }
+
+.prose h1 { font-size: 1.3em; }
+.prose h2 { font-size: 1.15em; }
+.prose h3 { font-size: 1.05em; }
+.prose h4,
+.prose h5,
+.prose h6 { font-size: 1em; }
 
 .prose p,
 .prose ul,
