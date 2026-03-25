@@ -15,6 +15,7 @@
 
 - `MCP_URL`
 - `MCP_TOKEN`
+- 如果你要把文档长期维护成知识库，推荐启用 Git 文档仓库同步，说明见 [docs/git-doc-sync.md](./docs/git-doc-sync.md)
 
 ---
 
@@ -111,6 +112,19 @@ curl -sS -X POST http://localhost:3000/api/search \
     "tags":["rag"]
   }'
 ```
+
+### 6) 启用 Git 文档仓库同步
+
+如果你希望参考 `PowerWiki` 的做法，用 Git 仓库维护 Markdown，再自动同步到 RedisRAG：
+
+```bash
+export DOC_SYNC_REPO_URL=/Users/ga666666/Desktop/RedisRAG-Doc
+export DOC_SYNC_BRANCH=main
+export DOC_SYNC_DOCS_ROOT=.
+npm run sync:docs
+```
+
+服务端启动后会自动按 `DOC_SYNC_INTERVAL_MS` 周期拉取并同步。文档规范和测试仓库结构见 [docs/git-doc-sync.md](./docs/git-doc-sync.md)。
 
 ---
 

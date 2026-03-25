@@ -10,6 +10,14 @@ const state = {
   session: null,
   health: null,
   metrics: null,
+  sync: {
+    summary: null,
+    repositories: [],
+    selectedRepoId: '',
+    loading: false,
+    error: '',
+    lastLoadedAt: 0
+  },
   metricsTimer: null,
   documents: {
     page: 1,
@@ -29,6 +37,9 @@ const state = {
 };
 
 const METRICS_AUTO_REFRESH_INTERVAL = 5000;
+const SYNC_STATUS_ENDPOINTS = ['/api/doc-sync/status', '/api/sync/status'];
+const SYNC_REPO_ENDPOINTS = ['/api/doc-sync/repos', '/api/sync/repos'];
+const SYNC_REPO_TEST_ENDPOINTS = ['/api/doc-sync/repos/test', '/api/sync/repos/test'];
 
 function first(...selectors) {
   for (const selector of selectors.flat()) {
@@ -91,6 +102,7 @@ const viewRoots = {
   search: first('#page-search', '[data-page="search"]', '#search-page'),
   documents: first('#page-documents', '[data-page="documents"]', '#documents-page'),
   api: first('#page-api', '[data-page="api"]', '#api-page'),
+  settings: first('#page-settings', '[data-page="settings"]', '#settings-page'),
   about: first('#page-about', '[data-page="about"]', '#about-page')
 };
 
@@ -183,6 +195,47 @@ const aboutLastQuery = first('#about-last-query');
 const aboutMemoryUsage = first('#about-memory-usage');
 const aboutMemoryRss = first('#about-memory-rss');
 const aboutVersionHint = first('#about-version-hint');
+const syncMonitorBadge = first('#sync-monitor-badge');
+const syncMonitorSummary = first('#sync-monitor-summary');
+const syncMonitorList = first('#sync-monitor-list');
+const syncMonitorRepos = first('#sync-monitor-repos');
+const syncMonitorLastRun = first('#sync-monitor-last-run');
+const syncMonitorLastSuccess = first('#sync-monitor-last-success');
+const syncMonitorDocsSynced = first('#sync-monitor-docs-synced');
+const syncMonitorDocsSkipped = first('#sync-monitor-docs-skipped');
+const syncMonitorStaleDeleted = first('#sync-monitor-stale-deleted');
+const syncMonitorValidationErrors = first('#sync-monitor-validation-errors');
+const syncMonitorEnabledRepos = first('#sync-monitor-enabled-repos');
+const syncMonitorTotalRepos = first('#sync-monitor-total-repos');
+const syncMonitorLastError = first('#sync-monitor-last-error');
+const syncRepoAddButton = first('#sync-repo-add-button');
+const syncRepoList = first('#sync-repo-list');
+const syncRepoForm = first('#sync-repo-form');
+const syncRepoIdInput = first('#sync-repo-id');
+const syncRepoNameInput = first('#sync-repo-name');
+const syncRepoUrlInput = first('#sync-repo-url');
+const syncRepoBranchInput = first('#sync-repo-branch');
+const syncRepoRootInput = first('#sync-repo-root');
+const syncRepoSecretInput = first('#sync-repo-secret');
+const syncRepoEnabledInput = first('#sync-repo-enabled');
+const syncRepoTestButton = first('#sync-repo-test-button');
+const syncRepoSaveButton = first('#sync-repo-save-button');
+const syncRepoDeleteButton = first('#sync-repo-delete-button');
+const syncRepoResetButton = first('#sync-repo-reset-button');
+const syncRepoMessage = first('#sync-repo-message');
+const syncRepoStatusBadge = first('#sync-repo-status-badge');
+const syncRepoCardCount = first('#sync-repo-card-count');
+const syncRepoRunButton = first('#sync-repo-run-button');
+const syncRepoSelectedName = first('#sync-repo-selected-name');
+const syncRepoSelectedState = first('#sync-repo-selected-state');
+const syncRepoSelectedSuccess = first('#sync-repo-selected-success');
+const syncRepoSelectedRun = first('#sync-repo-selected-run');
+const syncRepoSelectedSynced = first('#sync-repo-selected-synced');
+const syncRepoSelectedErrors = first('#sync-repo-selected-errors');
+const settingsOverviewTotal = first('#settings-overview-total');
+const settingsOverviewSuccess = first('#settings-overview-success');
+const settingsOverviewErrors = first('#settings-overview-errors');
+const settingsOverviewSynced = first('#settings-overview-synced');
 const documentPreviewModal = first('#document-preview-modal');
 const documentPreviewCloseButton = first('#document-preview-close');
 const documentPreviewTitle = first('#document-preview-title');
@@ -398,9 +451,77 @@ function formatDateTime(value) {
   return new Date(Number(value)).toLocaleString();
 }
 
+function formatSyncDateTime(value) {
+  if (!value) return '暂无';
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) return '暂无';
+  return new Date(parsed).toLocaleString();
+}
+
 function maskApiKey(value) {
   if (!value || value.length < 16) return value || '';
   return `${value.slice(0, 12)}...${value.slice(-6)}`;
+}
+
+function normalizeSyncRepo(repo = {}) {
+  return {
+    id: String(repo.id || repo.repoId || repo.name || repo.repoUrl || '').trim(),
+    name: String(repo.name || repo.repoName || '未命名仓库').trim(),
+    repoUrl: String(repo.repoUrl || repo.url || '').trim(),
+    branch: String(repo.branch || 'main').trim(),
+    docsRoot: String(repo.docsRoot || repo.docsPath || '.').trim() || '.',
+    secret: String(repo.secret || repo.token || '').trim(),
+    hasSecret: Boolean(repo.hasSecret || repo.secretMasked || repo.secret),
+    enabled: repo.enabled !== false,
+    running: Boolean(repo.running),
+    lastRunAt: Number(repo.lastRunAt || repo.lastSyncAt || 0),
+    lastSuccessAt: Number(repo.lastSuccessAt || repo.lastSyncedAt || 0),
+    lastTestAt: Number(repo.lastTestAt || 0),
+    documentsScanned: Number(repo.documentsScanned || repo.scanned || 0),
+    documentsSynced: Number(repo.documentsSynced || repo.synced || 0),
+    documentsSkipped: Number(repo.documentsSkipped || repo.skipped || 0),
+    draftsSkipped: Number(repo.draftsSkipped || repo.draftSkipped || 0),
+    staleDeleted: Number(repo.staleDeleted || 0),
+    validationErrors: Array.isArray(repo.validationErrors) ? repo.validationErrors : [],
+    lastError: String(repo.lastError || '').trim(),
+    lastStatus: String(repo.lastStatus || repo.status || '').trim(),
+    repoKey: String(repo.repoKey || repo.cacheKey || '').trim(),
+    lastRevision: String(repo.lastRevision || '').trim()
+  };
+}
+
+function normalizeSyncSummary(summary = {}) {
+  const repositories = Array.isArray(summary.repositories)
+    ? summary.repositories
+    : Array.isArray(summary.repos)
+      ? summary.repos
+      : (summary.repoUrl || summary.repoKey || summary.repoPath || summary.name ? [summary] : []);
+
+  const normalizedRepos = repositories.map((repo) => normalizeSyncRepo(repo));
+  const enabledRepos = normalizedRepos.filter((repo) => repo.enabled).length;
+  const validationErrors = Number(
+    summary.validationErrors ||
+    summary.validationErrorCount ||
+    summary.errorCount ||
+    normalizedRepos.reduce((total, repo) => total + repo.validationErrors.length, 0)
+  );
+
+  return {
+    enabled: summary.enabled !== false,
+    totalRepos: Number(summary.totalRepos || summary.repoCount || normalizedRepos.length),
+    enabledRepos: Number(summary.enabledRepos || enabledRepos),
+    lastRunAt: Number(summary.lastRunAt || 0),
+    lastSuccessAt: Number(summary.lastSuccessAt || 0),
+    documentsScanned: Number(summary.documentsScanned || summary.scanned || normalizedRepos.reduce((total, repo) => total + repo.documentsScanned, 0)),
+    documentsSynced: Number(summary.documentsSynced || summary.synced || normalizedRepos.reduce((total, repo) => total + repo.documentsSynced, 0)),
+    documentsSkipped: Number(summary.documentsSkipped || summary.skipped || normalizedRepos.reduce((total, repo) => total + repo.documentsSkipped, 0)),
+    draftsSkipped: Number(summary.draftsSkipped || summary.draftSkipped || normalizedRepos.reduce((total, repo) => total + repo.draftsSkipped, 0)),
+    staleDeleted: Number(summary.staleDeleted || summary.deleted || normalizedRepos.reduce((total, repo) => total + repo.staleDeleted, 0)),
+    validationErrors,
+    lastError: String(summary.lastError || summary.error || '').trim(),
+    lastMessage: String(summary.lastMessage || summary.message || '').trim(),
+    repositories: normalizedRepos
+  };
 }
 
 function showForcePasswordModal(message = '') {
@@ -482,7 +603,201 @@ function renderAbout() {
   }
 }
 
+function renderSyncSummary() {
+  const summary = state.sync.summary || normalizeSyncSummary({});
+
+  setText(syncMonitorBadge, summary.enabled ? '已启用' : '未启用');
+  setText(syncMonitorTotalRepos, String(summary.totalRepos || 0));
+  setText(syncMonitorEnabledRepos, String(summary.enabledRepos || 0));
+  setText(syncMonitorLastRun, formatSyncDateTime(summary.lastRunAt));
+  setText(syncMonitorLastSuccess, formatSyncDateTime(summary.lastSuccessAt));
+  setText(syncMonitorDocsSynced, String(summary.documentsSynced || 0));
+  setText(syncMonitorDocsSkipped, String(summary.documentsSkipped || 0));
+  setText(syncMonitorStaleDeleted, String(summary.staleDeleted || 0));
+  setText(syncMonitorValidationErrors, String(summary.validationErrors || 0));
+  setText(syncMonitorLastError, summary.lastError || summary.lastMessage || '暂无异常');
+  setText(settingsOverviewTotal, String(summary.totalRepos || 0));
+  setText(settingsOverviewSuccess, formatSyncDateTime(summary.lastSuccessAt));
+  setText(settingsOverviewErrors, String(summary.validationErrors || 0));
+  setText(settingsOverviewSynced, String(summary.documentsSynced || 0));
+
+  if (syncMonitorSummary) {
+    syncMonitorSummary.classList.toggle('is-empty', !summary.totalRepos);
+  }
+}
+
+function getRepoVisualState(repo) {
+  if (!repo) {
+    return { label: '未配置', className: 'offline' };
+  }
+  if (repo.running) {
+    return { label: '同步中', className: 'running' };
+  }
+  if (repo.lastError) {
+    return { label: '异常', className: 'offline' };
+  }
+  if (!repo.enabled) {
+    return { label: '停用', className: 'offline' };
+  }
+  return { label: '正常', className: 'online' };
+}
+
+function renderSelectedRepoSnapshot(repo = null) {
+  const current = repo ? normalizeSyncRepo(repo) : null;
+  const visual = getRepoVisualState(current);
+
+  setText(syncRepoSelectedName, current?.name || '新建仓库');
+  setText(syncRepoSelectedSuccess, formatSyncDateTime(current?.lastSuccessAt || 0));
+  setText(syncRepoSelectedRun, formatSyncDateTime(current?.lastRunAt || 0));
+  setText(syncRepoSelectedSynced, String(current?.documentsSynced || 0));
+  setText(syncRepoSelectedErrors, String(current?.validationErrors?.length || 0));
+
+  if (syncRepoSelectedState) {
+    syncRepoSelectedState.className = `sync-repo-badge ${visual.className}`;
+    setText(syncRepoSelectedState, visual.label);
+  }
+}
+
+function renderSyncRepoList() {
+  const repositories = state.sync.repositories || [];
+  if (syncRepoCardCount) {
+    setText(syncRepoCardCount, `${repositories.length} 个仓库`);
+  }
+
+  const containers = [syncRepoList, syncMonitorRepos, syncMonitorList].filter(Boolean);
+  if (!containers.length) return;
+
+  for (const container of containers) {
+    container.innerHTML = '';
+    if (!repositories.length) {
+      container.innerHTML = '<p class="empty">暂未配置仓库。点击“新增仓库”开始配置。</p>';
+      continue;
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (const repo of repositories) {
+      const visual = getRepoVisualState(repo);
+      const issueText = repo.lastError
+        ? repo.lastError
+        : (repo.validationErrors.length ? `${repo.validationErrors.length} 个校验问题待处理` : '最近一次同步无异常');
+      const card = document.createElement('article');
+      card.className = `sync-repo-card${repo.id === state.sync.selectedRepoId ? ' active' : ''}`;
+      card.innerHTML = `
+        <div class="sync-repo-card-top">
+          <div>
+            <strong class="sync-repo-title">${escapeHtml(repo.name || repo.id || '未命名仓库')}</strong>
+            <p class="sync-repo-url">${escapeHtml(repo.repoUrl || '未配置仓库地址')}</p>
+          </div>
+          <span class="sync-repo-badge ${visual.className}">${visual.label}</span>
+        </div>
+        <div class="sync-repo-meta">
+          <span>分支 ${escapeHtml(repo.branch || 'main')}</span>
+          <span>根目录 ${escapeHtml(repo.docsRoot || '.')}</span>
+          <span>最近成功 ${escapeHtml(formatSyncDateTime(repo.lastSuccessAt))}</span>
+          <span>同步 ${escapeHtml(String(repo.documentsSynced || 0))}</span>
+          <span>校验 ${escapeHtml(String(repo.validationErrors.length || 0))}</span>
+        </div>
+        <p class="sync-repo-note">${escapeHtml(issueText)}</p>
+        <div class="sync-repo-actions">
+          <button class="ghost sync-repo-edit-btn" type="button">编辑</button>
+          <button class="ghost sync-repo-test-btn" type="button">测试</button>
+          <button class="ghost sync-repo-run-btn" type="button">同步</button>
+        </div>
+      `;
+
+      on(card.querySelector('.sync-repo-edit-btn'), 'click', () => {
+        selectSyncRepo(repo.id);
+      });
+
+      on(card.querySelector('.sync-repo-test-btn'), 'click', async () => {
+        await testSyncRepo(repo.id);
+      });
+
+      on(card.querySelector('.sync-repo-run-btn'), 'click', async () => {
+        await runSyncRepoNow(repo.id);
+      });
+
+      fragment.appendChild(card);
+    }
+
+    container.appendChild(fragment);
+  }
+}
+
+function syncRepoFormMode() {
+  return syncRepoIdInput?.value ? 'edit' : 'create';
+}
+
+function clearSyncRepoMessage(message = '') {
+  if (syncRepoMessage) {
+    setText(syncRepoMessage, message);
+  }
+}
+
+function populateSyncRepoForm(repo = null) {
+  const current = repo ? normalizeSyncRepo(repo) : null;
+  if (syncRepoIdInput) syncRepoIdInput.value = current?.id || '';
+  if (syncRepoNameInput) syncRepoNameInput.value = current?.name || '';
+  if (syncRepoUrlInput) syncRepoUrlInput.value = current?.repoUrl || '';
+  if (syncRepoBranchInput) syncRepoBranchInput.value = current?.branch || 'main';
+  if (syncRepoRootInput) syncRepoRootInput.value = current?.docsRoot || '.';
+  if (syncRepoSecretInput) syncRepoSecretInput.value = '';
+  if (syncRepoEnabledInput) syncRepoEnabledInput.checked = current ? Boolean(current.enabled) : true;
+  if (syncRepoStatusBadge) {
+    const visual = getRepoVisualState(current);
+    setText(syncRepoStatusBadge, current ? visual.label : '新建仓库');
+  }
+  clearSyncRepoMessage(current ? `正在编辑 ${current.name || current.id}` : '填写仓库信息后保存即可启用同步。');
+  renderSelectedRepoSnapshot(current);
+  updateSyncRepoActionButtons();
+}
+
+function updateSyncRepoActionButtons() {
+  const editing = Boolean(syncRepoIdInput?.value);
+  if (syncRepoDeleteButton) {
+    syncRepoDeleteButton.disabled = !editing;
+  }
+  if (syncRepoSaveButton) {
+    setText(syncRepoSaveButton, editing ? '保存修改' : '保存仓库');
+  }
+  if (syncRepoTestButton) {
+    setText(syncRepoTestButton, editing ? '测试当前配置' : '测试新配置');
+  }
+  if (syncRepoRunButton) {
+    syncRepoRunButton.disabled = !editing;
+    setText(syncRepoRunButton, editing ? '立即同步' : '保存后可同步');
+  }
+}
+
+function selectSyncRepo(repoId) {
+  const repo = (state.sync.repositories || []).find((item) => item.id === repoId);
+  state.sync.selectedRepoId = repo ? repo.id : '';
+  populateSyncRepoForm(repo || null);
+  renderSyncRepoList();
+}
+
+function readSyncRepoForm() {
+  return {
+    id: syncRepoIdInput?.value.trim() || '',
+    name: syncRepoNameInput?.value.trim() || '',
+    repoUrl: syncRepoUrlInput?.value.trim() || '',
+    branch: syncRepoBranchInput?.value.trim() || 'main',
+    docsRoot: syncRepoRootInput?.value.trim() || '.',
+    secret: syncRepoSecretInput?.value.trim() || '',
+    enabled: Boolean(syncRepoEnabledInput?.checked)
+  };
+}
+
 async function request(url, options = {}) {
+  const result = await requestDetailed(url, options);
+  if (!result.ok) {
+    throw new Error(result.payload.error || 'Request failed');
+  }
+
+  return result.payload;
+}
+
+async function requestDetailed(url, options = {}) {
   const token = getToken();
   if (!token) {
     clearTokenAndRedirect();
@@ -511,11 +826,47 @@ async function request(url, options = {}) {
     throw new Error(payload.error || 'Authentication required');
   }
 
-  if (!response.ok) {
-    throw new Error(payload.error || 'Request failed');
+  return {
+    ok: response.ok,
+    status: response.status,
+    payload
+  };
+}
+
+async function requestWithFallback(urls, options = {}) {
+  const targets = Array.isArray(urls) ? urls : [urls];
+  let lastError = null;
+
+  for (const target of targets) {
+    try {
+      const result = await requestDetailed(target, options);
+      if (result.ok) {
+        return result.payload;
+      }
+
+      if (result.status === 404) {
+        lastError = new Error('NOT_FOUND');
+        continue;
+      }
+
+      throw new Error(result.payload.error || 'Request failed');
+    } catch (error) {
+      if (error.message === 'NOT_FOUND') {
+        lastError = error;
+        continue;
+      }
+      lastError = error;
+      if (error.message === 'PASSWORD_CHANGE_REQUIRED') {
+        throw error;
+      }
+    }
   }
 
-  return payload;
+  if (lastError && lastError.message === 'NOT_FOUND') {
+    return null;
+  }
+
+  throw lastError || new Error('Request failed');
 }
 
 function renderResults(items) {
@@ -842,6 +1193,265 @@ async function loadMetrics() {
       refreshMetricsButton.disabled = false;
     }
   }
+
+  await loadSyncOverview({ silent: true });
+}
+
+async function loadSyncOverview({ silent = false } = {}) {
+  state.sync.loading = true;
+  try {
+    const payload = await requestWithFallback(SYNC_STATUS_ENDPOINTS);
+    if (!payload) {
+      state.sync.summary = normalizeSyncSummary({});
+      state.sync.repositories = [];
+      state.sync.lastLoadedAt = Date.now();
+      renderSyncSummary();
+      renderSyncRepoList();
+      return;
+    }
+
+    const summary = normalizeSyncSummary(payload);
+    state.sync.summary = summary;
+    state.sync.repositories = summary.repositories;
+    state.sync.error = '';
+    state.sync.lastLoadedAt = Date.now();
+
+    const selected = summary.repositories.find((repo) => repo.id === state.sync.selectedRepoId);
+    if (selected) {
+      populateSyncRepoForm(selected);
+    } else if (summary.repositories.length) {
+      state.sync.selectedRepoId = summary.repositories[0].id;
+      populateSyncRepoForm(summary.repositories[0]);
+    } else {
+      state.sync.selectedRepoId = '';
+      populateSyncRepoForm(null);
+    }
+
+    renderSyncSummary();
+    renderSyncRepoList();
+  } catch (error) {
+    state.sync.error = error.message;
+    if (!silent) {
+      console.error('[sync] failed to load overview:', error.message);
+    }
+    state.sync.summary = normalizeSyncSummary({});
+    state.sync.repositories = [];
+    renderSyncSummary();
+    renderSyncRepoList();
+  } finally {
+    state.sync.loading = false;
+  }
+}
+
+async function loadSyncRepositories({ silent = false } = {}) {
+  try {
+    const payload = await requestWithFallback(SYNC_REPO_ENDPOINTS);
+    const repositories = Array.isArray(payload?.repositories)
+      ? payload.repositories
+      : Array.isArray(payload)
+        ? payload
+        : [];
+    if (repositories.length) {
+      state.sync.repositories = repositories.map((repo) => normalizeSyncRepo(repo));
+      const selected = state.sync.repositories.find((repo) => repo.id === state.sync.selectedRepoId);
+      if (selected) {
+        populateSyncRepoForm(selected);
+      } else if (state.sync.repositories.length) {
+        state.sync.selectedRepoId = state.sync.repositories[0].id;
+        populateSyncRepoForm(state.sync.repositories[0]);
+      }
+    } else if (!state.sync.repositories.length) {
+      state.sync.selectedRepoId = '';
+      populateSyncRepoForm(null);
+    }
+    renderSyncRepoList();
+  } catch (error) {
+    if (!silent) {
+      console.error('[sync] failed to load repositories:', error.message);
+    }
+  }
+}
+
+async function refreshSyncData({ silent = false } = {}) {
+  await loadSyncOverview({ silent });
+  await loadSyncRepositories({ silent });
+}
+
+async function submitSyncRepoForm(event) {
+  event.preventDefault();
+
+  if (state.requirePasswordChange) {
+    showForcePasswordModal('请先完成首次改密。');
+    return;
+  }
+
+  const payload = readSyncRepoForm();
+  if (!payload.name || !payload.repoUrl) {
+    clearSyncRepoMessage('名称和仓库地址不能为空。');
+    return;
+  }
+
+  const isEdit = Boolean(payload.id);
+  const submitButton = syncRepoSaveButton;
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+  clearSyncRepoMessage(isEdit ? '正在保存修改…' : '正在创建仓库…');
+
+  try {
+    const body = {
+      name: payload.name,
+      repoUrl: payload.repoUrl,
+      branch: payload.branch,
+      docsRoot: payload.docsRoot,
+      enabled: payload.enabled
+    };
+
+    if (payload.secret) {
+      body.secret = payload.secret;
+    }
+
+    const target = isEdit
+      ? `/api/doc-sync/repos/${encodeURIComponent(payload.id)}`
+      : '/api/doc-sync/repos';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    const result = await request(target, {
+      method,
+      body: JSON.stringify(body)
+    });
+
+    const repo = normalizeSyncRepo(result.repo || result.repository || result);
+    state.sync.selectedRepoId = repo.id;
+    clearSyncRepoMessage(isEdit ? '保存成功。' : '创建成功。');
+    await refreshSyncData({ silent: true });
+    selectSyncRepo(repo.id);
+  } catch (error) {
+    clearSyncRepoMessage(`保存失败：${error.message}`);
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+  }
+}
+
+async function testSyncRepo(repoId = '') {
+  if (state.requirePasswordChange) {
+    showForcePasswordModal('请先完成首次改密。');
+    return;
+  }
+
+  const payload = readSyncRepoForm();
+  const body = {
+    name: payload.name,
+    repoUrl: payload.repoUrl,
+    branch: payload.branch,
+    docsRoot: payload.docsRoot,
+    enabled: payload.enabled
+  };
+  if (payload.secret) {
+    body.secret = payload.secret;
+  }
+
+  const target = repoId
+    ? `/api/doc-sync/repos/${encodeURIComponent(repoId)}/test`
+    : '/api/doc-sync/repos/test';
+
+  if (syncRepoTestButton) {
+    syncRepoTestButton.disabled = true;
+  }
+  clearSyncRepoMessage('正在测试仓库连通性…');
+
+  try {
+    const result = await request(target, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+    clearSyncRepoMessage(result.message || '测试成功。');
+    await loadSyncOverview({ silent: true });
+  } catch (error) {
+    clearSyncRepoMessage(`测试失败：${error.message}`);
+  } finally {
+    if (syncRepoTestButton) {
+      syncRepoTestButton.disabled = false;
+    }
+  }
+}
+
+async function runSyncRepoNow(repoId = '') {
+  if (state.requirePasswordChange) {
+    showForcePasswordModal('请先完成首次改密。');
+    return;
+  }
+
+  const targetId = String(repoId || syncRepoIdInput?.value || '').trim();
+  if (!targetId) {
+    clearSyncRepoMessage('请先保存仓库，再执行同步。');
+    return;
+  }
+
+  if (syncRepoRunButton) {
+    syncRepoRunButton.disabled = true;
+  }
+  clearSyncRepoMessage('正在执行同步…');
+
+  try {
+    await request(`/api/doc-sync/repos/${encodeURIComponent(targetId)}/sync`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
+    clearSyncRepoMessage('同步完成。');
+    await refreshSyncData({ silent: true });
+  } catch (error) {
+    clearSyncRepoMessage(`同步失败：${error.message}`);
+  } finally {
+    if (syncRepoRunButton) {
+      syncRepoRunButton.disabled = false;
+    }
+  }
+}
+
+async function deleteSyncRepo() {
+  if (state.requirePasswordChange) {
+    showForcePasswordModal('请先完成首次改密。');
+    return;
+  }
+
+  const repoId = syncRepoIdInput?.value.trim() || '';
+  if (!repoId) {
+    clearSyncRepoMessage('请选择一个仓库后再删除。');
+    return;
+  }
+
+  const repoName = syncRepoNameInput?.value.trim() || repoId;
+  const confirmed = window.confirm(`确认删除仓库“${repoName}”吗？此操作不会删除 Git 远端仓库。`);
+  if (!confirmed) {
+    return;
+  }
+
+  if (syncRepoDeleteButton) {
+    syncRepoDeleteButton.disabled = true;
+  }
+  clearSyncRepoMessage('正在删除仓库…');
+
+  try {
+    await request(`/api/doc-sync/repos/${encodeURIComponent(repoId)}`, {
+      method: 'DELETE'
+    });
+    state.sync.selectedRepoId = '';
+    populateSyncRepoForm(null);
+    clearSyncRepoMessage('删除成功。');
+    await refreshSyncData({ silent: true });
+    if (state.sync.repositories.length) {
+      selectSyncRepo(state.sync.repositories[0].id);
+    }
+  } catch (error) {
+    clearSyncRepoMessage(`删除失败：${error.message}`);
+  } finally {
+    if (syncRepoDeleteButton) {
+      syncRepoDeleteButton.disabled = false;
+    }
+  }
 }
 
 function startMetricsAutoRefresh() {
@@ -1047,7 +1657,7 @@ async function submitCreateDocument(event) {
 }
 
 async function activateView(view) {
-  const nextView = ['monitor', 'search', 'documents', 'api', 'about'].includes(view) ? view : 'monitor';
+  const nextView = ['monitor', 'search', 'documents', 'api', 'settings', 'about'].includes(view) ? view : 'monitor';
 
   if (state.requirePasswordChange && nextView !== 'monitor') {
     showForcePasswordModal('请先完成首次改密。');
@@ -1079,6 +1689,14 @@ async function activateView(view) {
 
   if (nextView === 'api') {
     await loadApiKeys();
+    return;
+  }
+
+  if (nextView === 'settings') {
+    await refreshSyncData();
+    if (!state.sync.selectedRepoId && state.sync.repositories.length) {
+      selectSyncRepo(state.sync.repositories[0].id);
+    }
     return;
   }
 
@@ -1303,6 +1921,35 @@ function bindApiKeyForm() {
   });
 }
 
+function bindSyncRepoControls() {
+  on(syncRepoForm, 'submit', submitSyncRepoForm);
+  on(syncRepoTestButton, 'click', (event) => {
+    event.preventDefault();
+    testSyncRepo(syncRepoIdInput?.value.trim() || '');
+  });
+  on(syncRepoRunButton, 'click', (event) => {
+    event.preventDefault();
+    runSyncRepoNow(syncRepoIdInput?.value.trim() || '');
+  });
+  on(syncRepoDeleteButton, 'click', (event) => {
+    event.preventDefault();
+    deleteSyncRepo();
+  });
+  on(syncRepoResetButton, 'click', (event) => {
+    event.preventDefault();
+    const selected = (state.sync.repositories || []).find((repo) => repo.id === state.sync.selectedRepoId) || null;
+    populateSyncRepoForm(selected);
+  });
+  on(syncRepoAddButton, 'click', (event) => {
+    event.preventDefault();
+    state.sync.selectedRepoId = '';
+    populateSyncRepoForm(null);
+  });
+  on(syncRepoForm, 'input', () => {
+    updateSyncRepoActionButtons();
+  });
+}
+
 function bindGlobalActions() {
   on(refreshMetricsButton, 'click', () => {
     if (state.requirePasswordChange) {
@@ -1411,6 +2058,7 @@ bindDocumentPreviewControls();
 bindDocumentFilters();
 bindSearchForm();
 bindApiKeyForm();
+bindSyncRepoControls();
 bindGlobalActions();
 bindCreateDocumentForm();
 bindLegacyAddForm();

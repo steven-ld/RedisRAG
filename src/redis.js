@@ -67,9 +67,13 @@ function parseSearchResults(rawReply) {
       key,
       id: fields.id,
       content: fields.content,
+      title: fields.title,
+      summary: fields.summary,
       source: fields.source,
+      path: fields.path,
       tags: fields.tags ? fields.tags.split(',').filter(Boolean) : [],
       createdAt: Number(fields.createdAt || 0),
+      updatedAt: Number(fields.updatedAt || 0),
       vectorScore: fields.vector_score ? Number(fields.vector_score) : null
     });
   }
@@ -99,6 +103,7 @@ const authProfileKey = 'auth:user:amdin';
 const authTokenPrefix = 'auth:token:';
 const authApiKeyPrefix = 'auth:apikey:';
 const authApiKeyIndexKey = 'auth:apikey:index';
+const docSyncRepoPrefix = 'docsync:repo:';
 const defaultUsername = 'amdin';
 const defaultPassword = 'RedisRAG@2026';
 const authTokenTtlSeconds = 60 * 60 * 24;
@@ -131,6 +136,48 @@ function hashApiKey(apiKey) {
 
 function buildApiKeyRedisKey(apiKeyHash) {
   return `${authApiKeyPrefix}${apiKeyHash}`;
+}
+
+function buildDocSyncRepoKey(id) {
+  return `${docSyncRepoPrefix}${id}`;
+}
+
+function maskSecret(value) {
+  const text = String(value || '');
+  if (!text) {
+    return '';
+  }
+  if (text.length <= 8) {
+    return '••••••••';
+  }
+  return `${text.slice(0, 2)}••••${text.slice(-2)}`;
+}
+
+function mapDocSyncRepo(hash, { includeSecret = false } = {}) {
+  if (!hash.id) {
+    return null;
+  }
+
+  const secret = hash.secret || '';
+  const payload = {
+    id: hash.id,
+    name: hash.name || hash.id,
+    repoUrl: hash.repoUrl || '',
+    branch: hash.branch || 'main',
+    docsRoot: hash.docsRoot || '.',
+    repoName: hash.repoName || '',
+    enabled: hash.enabled !== '0',
+    hasSecret: Boolean(secret),
+    secretPreview: maskSecret(secret),
+    createdAt: Number(hash.createdAt || 0),
+    updatedAt: Number(hash.updatedAt || 0)
+  };
+
+  if (includeSecret) {
+    payload.secret = secret;
+  }
+
+  return payload;
 }
 
 async function recordSearchMetrics(resultsCount) {
@@ -179,6 +226,12 @@ export async function connectRedis() {
   }
 
   return client;
+}
+
+export async function closeRedis() {
+  if (client.isOpen) {
+    await client.quit();
+  }
 }
 
 export async function ensureAuthProfile() {
@@ -357,6 +410,100 @@ export async function revokeMcpApiKey(apiKey) {
   return Number(deleted) > 0;
 }
 
+export async function listDocSyncRepos({ includeSecrets = false } = {}) {
+  let cursor = '0';
+  const keys = [];
+
+  do {
+    const reply = await client.scan(cursor, {
+      MATCH: `${docSyncRepoPrefix}*`,
+      COUNT: 100
+    });
+
+    cursor = reply.cursor;
+    keys.push(...reply.keys);
+  } while (cursor !== '0');
+
+  if (!keys.length) {
+    return [];
+  }
+
+  const items = await Promise.all(keys.map(async (key) => {
+    const hash = await client.hGetAll(key);
+    return mapDocSyncRepo(hash, { includeSecret: includeSecrets });
+  }));
+
+  return items
+    .filter(Boolean)
+    .sort((left, right) => {
+      if (left.enabled !== right.enabled) {
+        return left.enabled ? -1 : 1;
+      }
+      return (left.name || left.id).localeCompare(right.name || right.id);
+    });
+}
+
+export async function getDocSyncRepo(id, { includeSecret = false } = {}) {
+  const safeId = String(id || '').trim();
+  if (!safeId) {
+    return null;
+  }
+
+  const hash = await client.hGetAll(buildDocSyncRepoKey(safeId));
+  return mapDocSyncRepo(hash, { includeSecret });
+}
+
+export async function upsertDocSyncRepo({
+  id,
+  name,
+  repoUrl,
+  branch = 'main',
+  docsRoot = '.',
+  repoName = '',
+  enabled = true,
+  secret = '',
+  secretProvided = false,
+  clearSecret = false
+} = {}) {
+  const safeId = String(id || crypto.randomUUID()).trim();
+  const safeRepoUrl = String(repoUrl || '').trim();
+  if (!safeRepoUrl) {
+    throw new Error('repoUrl is required');
+  }
+
+  const key = buildDocSyncRepoKey(safeId);
+  const existing = await client.hGetAll(key);
+  const now = Date.now();
+  const nextSecret = clearSecret
+    ? ''
+    : (secretProvided ? String(secret || '').trim() : (existing.secret || ''));
+
+  await client.hSet(key, {
+    id: safeId,
+    name: String(name || safeId).trim() || safeId,
+    repoUrl: safeRepoUrl,
+    branch: String(branch || 'main').trim() || 'main',
+    docsRoot: String(docsRoot || '.').trim() || '.',
+    repoName: String(repoName || '').trim(),
+    enabled: enabled === false ? '0' : '1',
+    secret: nextSecret,
+    createdAt: existing.createdAt || String(now),
+    updatedAt: String(now)
+  });
+
+  return getDocSyncRepo(safeId, { includeSecret: false });
+}
+
+export async function deleteDocSyncRepo(id) {
+  const safeId = String(id || '').trim();
+  if (!safeId) {
+    return false;
+  }
+
+  const deleted = await client.del(buildDocSyncRepoKey(safeId));
+  return Number(deleted) > 0;
+}
+
 export async function verifyMcpApiKey(apiKey) {
   if (!apiKey) {
     return null;
@@ -403,21 +550,37 @@ function extractTitleFromContent(content) {
 export async function upsertDocument({
   id = crypto.randomUUID(),
   content,
+  title,
+  summary = '',
   source = 'manual',
-  tags = []
+  tags = [],
+  createdAt,
+  updatedAt,
+  repo = '',
+  path = '',
+  checksum = '',
+  syncManaged = false
 }) {
   const embedding = await getEmbedding(content);
   const key = `${config.keyPrefix}${id}`;
-  const createdAt = Date.now();
-  const title = extractTitleFromContent(content);
+  const now = Date.now();
+  const normalizedCreatedAt = Number(createdAt || now);
+  const normalizedUpdatedAt = Number(updatedAt || normalizedCreatedAt || now);
+  const normalizedTitle = title ? String(title).trim() : extractTitleFromContent(content);
 
   await client.hSet(key, {
     id,
     content,
-    title,
+    title: normalizedTitle,
+    summary,
     source,
     tags: tags.join(','),
-    createdAt: String(createdAt),
+    createdAt: String(normalizedCreatedAt),
+    updatedAt: String(normalizedUpdatedAt),
+    repo,
+    path,
+    checksum,
+    syncManaged: syncManaged ? '1' : '0',
     embedding: toFloat32Buffer(embedding)
   });
 
@@ -425,10 +588,40 @@ export async function upsertDocument({
     id,
     key,
     content,
-    title,
+    title: normalizedTitle,
+    summary,
     source,
     tags,
-    createdAt
+    createdAt: normalizedCreatedAt,
+    updatedAt: normalizedUpdatedAt,
+    repo,
+    path,
+    checksum,
+    syncManaged: Boolean(syncManaged)
+  };
+}
+
+export async function getDocumentById(id) {
+  const key = `${config.keyPrefix}${id}`;
+  const hash = await client.hGetAll(key);
+  if (!hash.id) {
+    return null;
+  }
+
+  return {
+    id: hash.id,
+    key,
+    content: hash.content,
+    title: hash.title || extractTitleFromContent(hash.content),
+    summary: hash.summary || '',
+    source: hash.source,
+    tags: hash.tags ? hash.tags.split(',').filter(Boolean) : [],
+    createdAt: Number(hash.createdAt || 0),
+    updatedAt: Number(hash.updatedAt || hash.createdAt || 0),
+    repo: hash.repo || '',
+    path: hash.path || '',
+    checksum: hash.checksum || '',
+    syncManaged: hash.syncManaged === '1'
   };
 }
 
@@ -458,14 +651,24 @@ export async function listDocuments() {
         key,
         content: hash.content,
         title: hash.title || extractTitleFromContent(hash.content),
+        summary: hash.summary || '',
         source: hash.source,
         tags: hash.tags ? hash.tags.split(',').filter(Boolean) : [],
-        createdAt: Number(hash.createdAt || 0)
+        createdAt: Number(hash.createdAt || 0),
+        updatedAt: Number(hash.updatedAt || hash.createdAt || 0),
+        repo: hash.repo || '',
+        path: hash.path || '',
+        checksum: hash.checksum || '',
+        syncManaged: hash.syncManaged === '1'
       };
     })
   );
 
-  return documents.sort((left, right) => right.createdAt - left.createdAt);
+  return documents.sort((left, right) => {
+    const leftTime = left.updatedAt || left.createdAt;
+    const rightTime = right.updatedAt || right.createdAt;
+    return rightTime - leftTime;
+  });
 }
 
 function normalizeFilterText(value) {
@@ -507,6 +710,19 @@ function filterDocuments(documents, filters = {}) {
 
 export async function deleteDocument(id) {
   return client.del(`${config.keyPrefix}${id}`);
+}
+
+export async function deleteDocumentsByIds(ids = []) {
+  const normalized = Array.isArray(ids)
+    ? ids.map((id) => String(id).trim()).filter(Boolean)
+    : [];
+
+  if (!normalized.length) {
+    return 0;
+  }
+
+  const results = await Promise.all(normalized.map((id) => deleteDocument(id)));
+  return results.reduce((total, item) => total + Number(item || 0), 0);
 }
 
 function escapeTagValue(value) {
@@ -567,12 +783,16 @@ export async function searchDocuments({
     'vec',
     queryVector,
     'RETURN',
-    '6',
+    '10',
     'id',
     'content',
+    'title',
+    'summary',
     'source',
+    'path',
     'tags',
     'createdAt',
+    'updatedAt',
     'vector_score',
     'SORTBY',
     'vector_score',

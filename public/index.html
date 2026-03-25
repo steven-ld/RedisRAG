@@ -103,6 +103,7 @@
           <button class="nav-item" type="button" data-view="search">检索测试</button>
           <button class="nav-item" type="button" data-view="documents">文档管理</button>
           <button class="nav-item" type="button" data-view="api">API 管理</button>
+          <button class="nav-item" type="button" data-view="settings">设置</button>
           <button class="nav-item" type="button" data-view="about">关于</button>
         </nav>
 
@@ -276,6 +277,65 @@
                 <strong class="mcp-stat-value" id="mcp-miss-rate">-</strong>
               </div>
             </div>
+          </div>
+
+          <div class="sync-panel">
+            <div class="sync-panel-header">
+              <div>
+                <p class="eyebrow">Document Sync</p>
+                <h3>同步监控</h3>
+                <p class="monitor-subtitle">汇总仓库数量、最近同步时间、同步量和异常情况。</p>
+              </div>
+              <span id="sync-monitor-badge" class="sync-status-pill">未加载</span>
+            </div>
+
+            <div id="sync-monitor-summary" class="sync-summary-grid">
+              <article class="sync-summary-card">
+                <span class="sync-summary-label">仓库总数</span>
+                <strong id="sync-monitor-total-repos" class="sync-summary-value">0</strong>
+                <span class="sync-summary-hint">当前已配置仓库</span>
+              </article>
+              <article class="sync-summary-card">
+                <span class="sync-summary-label">启用仓库</span>
+                <strong id="sync-monitor-enabled-repos" class="sync-summary-value">0</strong>
+                <span class="sync-summary-hint">参与自动同步</span>
+              </article>
+              <article class="sync-summary-card">
+                <span class="sync-summary-label">最近同步</span>
+                <strong id="sync-monitor-last-run" class="sync-summary-value">暂无</strong>
+                <span class="sync-summary-hint">最后一次触发时间</span>
+              </article>
+              <article class="sync-summary-card">
+                <span class="sync-summary-label">最近成功</span>
+                <strong id="sync-monitor-last-success" class="sync-summary-value">暂无</strong>
+                <span class="sync-summary-hint">最后一次成功时间</span>
+              </article>
+              <article class="sync-summary-card">
+                <span class="sync-summary-label">同步文档</span>
+                <strong id="sync-monitor-docs-synced" class="sync-summary-value">0</strong>
+                <span class="sync-summary-hint">本次累计写入</span>
+              </article>
+              <article class="sync-summary-card">
+                <span class="sync-summary-label">跳过 / 清理</span>
+                <strong class="sync-summary-value">
+                  <span id="sync-monitor-docs-skipped">0</span> / <span id="sync-monitor-stale-deleted">0</span>
+                </strong>
+                <span class="sync-summary-hint">草稿和陈旧记录</span>
+              </article>
+            </div>
+
+            <div class="sync-monitor-footer">
+              <div>
+                <span class="sync-footer-label">校验错误</span>
+                <strong id="sync-monitor-validation-errors" class="sync-footer-value">0</strong>
+              </div>
+              <div class="sync-footer-error">
+                <span class="sync-footer-label">最近异常</span>
+                <strong id="sync-monitor-last-error" class="sync-footer-value">暂无异常</strong>
+              </div>
+            </div>
+
+            <div id="sync-monitor-list" class="sync-monitor-list"></div>
           </div>
         </section>
 
@@ -457,6 +517,142 @@
           </div>
         </section>
 
+        <section id="page-settings" data-page="settings" class="panel content-section settings-panel hidden">
+          <div class="section-head-split settings-head">
+            <div>
+              <p class="eyebrow">Repository Sync</p>
+              <h2>设置</h2>
+              <p class="settings-subtitle">把设置页当成文档同步工作台来用。这里可以维护多个 Git 仓库、测试访问权限，并快速确认最近一次同步结果。</p>
+            </div>
+            <div class="settings-head-actions">
+              <span id="sync-repo-card-count" class="settings-count">0 个仓库</span>
+              <button id="sync-repo-add-button" class="primary" type="button">新增仓库</button>
+            </div>
+          </div>
+
+          <div class="settings-overview-grid">
+            <article class="settings-overview-card">
+              <span class="settings-overview-label">仓库总数</span>
+              <strong id="settings-overview-total" class="settings-overview-value">0</strong>
+              <span class="settings-overview-hint">当前已登记的同步源</span>
+            </article>
+            <article class="settings-overview-card">
+              <span class="settings-overview-label">最近成功</span>
+              <strong id="settings-overview-success" class="settings-overview-value">暂无</strong>
+              <span class="settings-overview-hint">最后一次成功同步时间</span>
+            </article>
+            <article class="settings-overview-card">
+              <span class="settings-overview-label">校验错误</span>
+              <strong id="settings-overview-errors" class="settings-overview-value">0</strong>
+              <span class="settings-overview-hint">等待处理的文档规则问题</span>
+            </article>
+            <article class="settings-overview-card accent">
+              <span class="settings-overview-label">本轮同步</span>
+              <strong id="settings-overview-synced" class="settings-overview-value">0</strong>
+              <span class="settings-overview-hint">最近一轮累计写入文档</span>
+            </article>
+          </div>
+
+          <div class="settings-layout">
+            <aside class="settings-sidebar">
+              <div class="panel-head">
+                <h3>仓库列表</h3>
+                <p>选择左侧仓库可直接编辑，卡片里会显示启用状态、最近成功时间、校验结果和快捷操作。</p>
+              </div>
+              <div id="sync-repo-list" class="sync-repo-list"></div>
+            </aside>
+
+            <div class="settings-editor">
+              <div class="panel-head settings-editor-head">
+                <div>
+                  <h3>仓库配置</h3>
+                  <p id="sync-repo-message" aria-live="polite">填写仓库信息后保存即可启用同步。</p>
+                </div>
+                <span id="sync-repo-status-badge" class="sync-status-pill">新建仓库</span>
+              </div>
+
+              <div class="settings-selection-card">
+                <div class="settings-selection-head">
+                  <div>
+                    <span class="settings-selection-label">当前选中</span>
+                    <strong id="sync-repo-selected-name" class="settings-selection-title">新建仓库</strong>
+                  </div>
+                  <span id="sync-repo-selected-state" class="sync-repo-badge offline">未配置</span>
+                </div>
+                <div class="settings-selection-meta">
+                  <span>最近成功 <strong id="sync-repo-selected-success">暂无</strong></span>
+                  <span>最近同步 <strong id="sync-repo-selected-run">暂无</strong></span>
+                  <span>已同步 <strong id="sync-repo-selected-synced">0</strong></span>
+                  <span>校验错误 <strong id="sync-repo-selected-errors">0</strong></span>
+                </div>
+              </div>
+
+              <form id="sync-repo-form" class="stack sync-repo-form">
+                <input id="sync-repo-id" name="id" type="hidden" />
+                <fieldset class="settings-fieldset">
+                  <legend>基础信息</legend>
+                  <div class="grid-2">
+                    <label>
+                      名称
+                      <input id="sync-repo-name" name="name" autocomplete="off" placeholder="例如 主知识库…" required />
+                      <span class="field-hint">用于控制台显示，建议按业务域命名。</span>
+                    </label>
+                    <label>
+                      仓库地址
+                      <input id="sync-repo-url" name="repoUrl" type="url" inputmode="url" spellcheck="false" autocomplete="off" placeholder="https://github.com/your-org/your-docs.git" required />
+                      <span class="field-hint">支持本地 Git 路径，也支持 GitHub HTTPS 仓库。</span>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <fieldset class="settings-fieldset">
+                  <legend>拉取规则</legend>
+                  <div class="grid-2">
+                    <label>
+                      分支
+                      <input id="sync-repo-branch" name="branch" autocomplete="off" spellcheck="false" value="main" placeholder="例如 main…" />
+                      <span class="field-hint">默认使用 `main`，也可以改成 `master` 或业务分支。</span>
+                    </label>
+                    <label>
+                      文档根目录
+                      <input id="sync-repo-root" name="docsRoot" autocomplete="off" spellcheck="false" value="." placeholder="例如 docs…" />
+                      <span class="field-hint">仓库中文档所在目录，填 `.` 表示仓库根目录。</span>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <fieldset class="settings-fieldset">
+                  <legend>认证与启用</legend>
+                  <div class="grid-2">
+                    <label>
+                      GitHub Token / HTTP 密钥（选填）
+                      <input id="sync-repo-secret" name="secret" type="password" autocomplete="new-password" placeholder="留空则不修改已有密钥…" />
+                      <span class="field-hint">私有仓库建议使用 HTTPS + Token；公开仓库可留空。</span>
+                    </label>
+                    <label class="checkbox-field">
+                      <span>启用同步</span>
+                      <div class="checkbox-row">
+                        <input id="sync-repo-enabled" name="enabled" type="checkbox" checked />
+                        <span>保存后参与自动同步与监控统计</span>
+                      </div>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <p class="settings-tip">“测试”会先检查仓库连通性、分支和访问凭据；“立即同步”会对当前仓库触发一次真实同步。</p>
+
+                <div class="form-actions sync-form-actions">
+                  <button id="sync-repo-reset-button" class="ghost" type="button">重置</button>
+                  <button id="sync-repo-delete-button" class="ghost danger" type="button">删除</button>
+                  <button id="sync-repo-test-button" class="ghost" type="button">测试</button>
+                  <button id="sync-repo-run-button" class="ghost" type="button">立即同步</button>
+                  <button id="sync-repo-save-button" class="primary" type="submit">保存仓库</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
         <section id="page-about" data-page="about" class="panel content-section about-panel hidden">
           <div class="about-hero">
             <div class="about-badge">Redis Vector Search</div>
@@ -537,6 +733,14 @@
               <div class="command-item">
                 <code class="command-code">/api/documents</code>
                 <span class="command-desc">文档管理接口</span>
+              </div>
+              <div class="command-item">
+                <code class="command-code">/api/sync/status</code>
+                <span class="command-desc">同步状态汇总</span>
+              </div>
+              <div class="command-item">
+                <code class="command-code">/api/doc-sync/repos</code>
+                <span class="command-desc">仓库配置接口</span>
               </div>
             </div>
           </div>

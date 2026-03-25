@@ -21,6 +21,10 @@
 | `EMBEDDING_PROVIDER` | `simple` | `simple` 使用内置向量，`openai` 需要额外密钥 |
 | `EMBEDDING_DIM` | `256`（simple）/`1536`（OpenAI） | 向量维度需与 embedding provider 保持一致 |
 | `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | 仅 `openai` 供应商需要设置 |
+| `DOC_SYNC_REPO_URL` | `/Users/ga666666/Desktop/RedisRAG-Doc` | Git 文档仓库地址，也可以是本地 Git 仓库路径 |
+| `DOC_SYNC_BRANCH` | `main` | 文档仓库分支 |
+| `DOC_SYNC_DOCS_ROOT` | `.` | 仓库内文档根目录 |
+| `DOC_SYNC_INTERVAL_MS` | `180000` | 自动同步周期 |
 
 示例 `.env`：
 ```env
@@ -28,6 +32,8 @@ PORT=3000
 REDIS_URL=redis://redis:6379
 EMBEDDING_PROVIDER=simple
 EMBEDDING_DIM=256
+DOC_SYNC_REPO_URL=/Users/ga666666/Desktop/RedisRAG-Doc
+DOC_SYNC_BRANCH=main
 ```
 
 ## 4. 启动流程

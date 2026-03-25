@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "node --watch src/app.js",
     "start": "node src/app.js",
+    "sync:docs": "node src/doc-sync-cli.js",
     "mcp:start": "node src/mcp-server.js",
-    "check": "node --check src/app.js && node --check src/redis.js && node --check src/embeddings.js && node --check src/mcp-tools.js && node --check src/mcp-server.js && node --check public/app.js"
+    "check": "node --check src/app.js && node --check src/doc-sync.js && node --check src/doc-sync-cli.js && node --check src/redis.js && node --check src/embeddings.js && node --check src/mcp-tools.js && node --check src/mcp-server.js && node --check public/app.js"
   },
   "dependencies": {
     "@redis/client": "^5.8.2",

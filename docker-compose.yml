@@ -21,8 +21,15 @@ services:
       VECTOR_KEY_PREFIX: "doc:"
       EMBEDDING_DIM: "256"
       EMBEDDING_PROVIDER: "simple"
+      DOC_SYNC_REPO_URL: "/doc-repos/RedisRAG-Doc"
+      DOC_SYNC_BRANCH: "main"
+      DOC_SYNC_DOCS_ROOT: "."
+      DOC_SYNC_REPO_NAME: "redisrag-doc"
+      DOC_SYNC_INTERVAL_MS: "180000"
     ports:
       - "3000:3000"
+    volumes:
+      - ${DOC_SYNC_REPO_HOST_PATH:-/Users/ga666666/Desktop/RedisRAG-Doc}:/doc-repos/RedisRAG-Doc
 
 volumes:
   redis-rag-data:
