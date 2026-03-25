@@ -236,6 +236,7 @@ const settingsOverviewTotal = first('#settings-overview-total');
 const settingsOverviewSuccess = first('#settings-overview-success');
 const settingsOverviewErrors = first('#settings-overview-errors');
 const settingsOverviewSynced = first('#settings-overview-synced');
+const settingsSelectionCard = first('.settings-selection-card');
 const documentPreviewModal = first('#document-preview-modal');
 const documentPreviewCloseButton = first('#document-preview-close');
 const documentPreviewTitle = first('#document-preview-title');
@@ -656,6 +657,11 @@ function renderSelectedRepoSnapshot(repo = null) {
     syncRepoSelectedState.className = `sync-repo-badge ${visual.className}`;
     setText(syncRepoSelectedState, visual.label);
   }
+
+  if (settingsSelectionCard) {
+    settingsSelectionCard.dataset.state = visual.className;
+    settingsSelectionCard.classList.toggle('is-empty', !current);
+  }
 }
 
 function renderSyncRepoList() {
@@ -675,13 +681,15 @@ function renderSyncRepoList() {
     }
 
     const fragment = document.createDocumentFragment();
-    for (const repo of repositories) {
+    repositories.forEach((repo, index) => {
       const visual = getRepoVisualState(repo);
       const issueText = repo.lastError
         ? repo.lastError
         : (repo.validationErrors.length ? `${repo.validationErrors.length} 个校验问题待处理` : '最近一次同步无异常');
       const card = document.createElement('article');
       card.className = `sync-repo-card${repo.id === state.sync.selectedRepoId ? ' active' : ''}`;
+      card.dataset.state = visual.className;
+      card.style.setProperty('--reveal-index', String(index));
       card.innerHTML = `
         <div class="sync-repo-card-top">
           <div>
@@ -718,7 +726,7 @@ function renderSyncRepoList() {
       });
 
       fragment.appendChild(card);
-    }
+    });
 
     container.appendChild(fragment);
   }
@@ -746,6 +754,9 @@ function populateSyncRepoForm(repo = null) {
   if (syncRepoStatusBadge) {
     const visual = getRepoVisualState(current);
     setText(syncRepoStatusBadge, current ? visual.label : '新建仓库');
+  }
+  if (syncRepoForm) {
+    syncRepoForm.dataset.mode = current ? 'edit' : 'create';
   }
   clearSyncRepoMessage(current ? `正在编辑 ${current.name || current.id}` : '填写仓库信息后保存即可启用同步。');
   renderSelectedRepoSnapshot(current);
@@ -935,10 +946,11 @@ function renderDocuments(items) {
   }
 
   const fragment = document.createDocumentFragment();
-  for (const item of items) {
+  items.forEach((item, index) => {
     const node = documentTemplate?.content?.firstElementChild
       ? documentTemplate.content.firstElementChild.cloneNode(true)
       : document.createElement('article');
+    node.style.setProperty('--reveal-index', String(index));
 
     if (!documentTemplate?.content?.firstElementChild) {
       node.className = 'doc-card';
@@ -996,7 +1008,7 @@ function renderDocuments(items) {
     });
 
     fragment.appendChild(node);
-  }
+  });
 
   documentsContainer.appendChild(fragment);
 }
@@ -1609,12 +1621,14 @@ async function runSearch(page = 1) {
 function openDocumentModal() {
   if (!documentModal) return;
   setHidden(documentModal, false);
+  documentModal.setAttribute('aria-hidden', 'false');
   documentCreateContentInput?.focus();
 }
 
 function closeDocumentModal() {
   if (!documentModal) return;
   setHidden(documentModal, true);
+  documentModal.setAttribute('aria-hidden', 'true');
   documentCreateForm?.reset();
 }
 
@@ -2081,6 +2095,12 @@ if (forced) {
 
 if (documentModal) {
   setHidden(documentModal, true);
+  documentModal.setAttribute('aria-hidden', 'true');
+}
+
+if (documentPreviewModal) {
+  setHidden(documentPreviewModal, true);
+  documentPreviewModal.setAttribute('aria-hidden', 'true');
 }
 
 if (!isSidebarLayout()) {
